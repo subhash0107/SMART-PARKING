@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Parking System - IoT Solution for Urban Traffic</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar">
+        <div class="container">
+            <div class="logo">
+                <span class="logo-icon">🅿️</span>
+                <span class="logo-text">Smart Parking</span>
+            </div>
+            <ul class="nav-links">
+                <li><a href="#home" class="active">Home</a></li>
+                <li><a href="#booking">Book Parking</a></li>
+                <li><a href="#myBookings">My Bookings</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li class="user-menu-container">
+                    <a href="#" id="userMenuToggle" class="user-menu-icon">👤 Login</a>
+                    <div id="userDropdown" class="user-dropdown">
+                        <div class="dropdown-header" id="userDropdownName"></div>
+                        <div class="dropdown-divider"></div>
+                        <a href="#profile" class="dropdown-item">👤 My Profile</a>
+                        <a href="#myBookings" class="dropdown-item">📋 My Bookings</a>
+                        <a href="#" id="logoutBtn" class="dropdown-item logout-item">🚪 Logout</a>
+                    </div>
+                </li>
+            </ul>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero">
+        <div class="hero-content">
+            <h1>Smart Parking System</h1>
+            <p>Revolutionizing Urban Parking with IoT Technology</p>
+            <button class="cta-button" onclick="scrollToSection('solution')">Discover Solution</button>
+        </div>
+        <div class="hero-graphic">
+            <div class="parking-grid">
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="Available"></div>
+                <div class="spot available" title="available"></div>
+                <div class="spot available" title="Available"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Problem Statement Section -->
+    <section id="problem" class="section problem-section">
+        <div class="container">
+            <h2>The Problem</h2>
+            <div class="problem-content">
+                <div class="problem-box">
+                    <div class="icon">🚗</div>
+                    <h3>Urban Traffic Congestion</h3>
+                    <p>Drivers spend excessive time searching for available parking spots, contributing to increased pollution and traffic delays.</p>
+                </div>
+                <div class="problem-box">
+                    <div class="icon">⏱️</div>
+                    <h3>Wasted Time</h3>
+                    <p>Studies show that finding a parking spot can take up to 30 minutes in busy urban areas, with 30% of traffic caused by searching for parking.</p>
+                </div>
+                <div class="problem-box">
+                    <div class="icon">💨</div>
+                    <h3>Environmental Impact</h3>
+                    <p>Inefficient parking searches lead to increased vehicle emissions and contribute significantly to urban air pollution.</p>
+                </div>
+                <div class="problem-box">
+                    <div class="icon">💰</div>
+                    <h3>Economic Loss</h3>
+                    <p>Wasted fuel, time, and increased stress result in significant economic costs for individuals and cities.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Background Section -->
+    <section id="background" class="section background-section">
+        <div class="container">
+            <h2>Why Smart Parking?</h2>
+            <div class="background-content">
+                <div class="background-text">
+                    <h3>Smart Parking: The Future of Urban Mobility</h3>
+                    <p>Smart cities require intelligent parking solutions that save time, reduce congestion, and improve the overall driving experience. Real-time parking monitoring is one of the most practical and impactful applications of IoT (Internet of Things) technology.</p>
+                    <p>Our Smart Parking System leverages cutting-edge technology to create a seamless parking experience for urban drivers and city administrators. With our system deployed in Vizag, Ongole, Tirupati, Vijayawada, Guntur, and Kadapa, we're transforming how people find parking across India's major cities.</p>
+                    
+                    <h4>🎯 Key Benefits</h4>
+                    <ul class="benefits-list">
+                        <li>✓ Real-time parking availability updates across all monitored parking lots</li>
+                        <li>✓ Reduced time spent searching for spots (up to 60% time savings)</li>
+                        <li>✓ Lower traffic congestion and emissions (45% reduction in traffic)</li>
+                        <li>✓ Improved city planning and infrastructure management</li>
+                        <li>✓ Fair pricing: Standardized ₹10/hour rates across all locations</li>
+                        <li>✓ Advanced IoT sensor technology for 99% accuracy</li>
+                    </ul>
+                    
+                    <h4>🔒 Security & Safety First</h4>
+                    <p>Your data and transactions are protected with enterprise-grade encryption and real-time fraud detection. We implement industry-standard security protocols including two-factor authentication, OTP verification, and secure payment gateways.</p>
+                </div>
+                <div class="background-graphic">
+                    <div class="chart">
+                        <div class="bar bar-traffic" title="Traffic Reduction">45%</div>
+                        <div class="bar bar-time" title="Time Saved">60%</div>
+                        <div class="bar bar-emissions" title="Emissions Reduced">35%</div>
+                        <div class="bar bar-satisfaction" title="User Satisfaction">50%</div>
+                    </div>
+                    <p class="chart-label">Estimated improvements with Smart Parking</p>
+                    
+                    <div class="coverage-card">
+                        <h4 class="coverage-heading">📱 Our Coverage</h4>
+                        <p class="coverage-item"><strong>6 Premium Cities:</strong> Vizag • Ongole • Tirupati • Vijayawada • Guntur • Kadapa</p>
+                        <p class="coverage-item"><strong>10 Managed Parking Lots:</strong> Premium locations with real-time monitoring</p>
+                        <p class="coverage-item"><strong>100+ Parking Spots:</strong> Managed with IoT sensors and live availability tracking</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Solution Section -->
+    <section id="solution" class="section solution-section">
+        <div class="container">
+            <h2>Our Solution</h2>
+            <div class="solution-grid">
+                <div class="solution-card">
+                    <div class="card-icon">📡</div>
+                    <h3>Sensor Integration</h3>
+                    <p><strong>Ultrasonic & IR Sensors:</strong> Deploy sensors in parking slots to detect empty or occupied spaces with 99% accuracy.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>Real-time detection</li>
+                            <li>Weather resistant</li>
+                            <li>Low power consumption</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="card-icon">⚙️</div>
+                    <h3>Data Processing</h3>
+                    <p><strong>Arduino & Raspberry Pi:</strong> Collect and process sensor data, managing network communication and local intelligence.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>Real-time processing</li>
+                            <li>Data filtering</li>
+                            <li>Local caching</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="card-icon">📱</div>
+                    <h3>Mobile & Web App</h3>
+                    <p><strong>User Interface:</strong> Intuitive applications showing real-time available parking spots with navigation guidance.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>Live availability map</li>
+                            <li>GPS navigation</li>
+                            <li>Multi-platform support</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="card-icon">💳</div>
+                    <h3>Booking & Payment</h3>
+                    <p><strong>Smart Transactions:</strong> Reserve parking spots in advance and manage payments seamlessly within the application.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>Online reservations</li>
+                            <li>Multiple payment methods</li>
+                            <li>Invoice management</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="card-icon">☁️</div>
+                    <h3>Cloud Connectivity</h3>
+                    <p><strong>Network Integration:</strong> Wi-Fi or cellular networks ensure real-time updates and seamless cloud synchronization.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>5G/4G network</li>
+                            <li>Cloud synchronization</li>
+                            <li>API integration</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="solution-card">
+                    <div class="card-icon">🔐</div>
+                    <h3>Security & Analytics</h3>
+                    <p><strong>Data Protection:</strong> Encrypted communications and advanced analytics for better insights and system management.</p>
+                    <div class="card-details">
+                        <ul>
+                            <li>End-to-end encryption</li>
+                            <li>Data analytics</li>
+                            <li>Admin dashboard</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Booking Section -->
+    <section id="booking" class="section booking-section">
+        <div class="container">
+            <h2>Book Your Parking Spot</h2>
+            <div class="booking-container">
+                <div class="booking-filters">
+                    <div class="filter-group">
+                        <label for="citySelect">Select City</label>
+                        <select id="citySelect" class="form-control" aria-label="Select City">
+                            <option value="">Choose a city...</option>
+                            <option value="Vizag">Vizag</option>
+                            <option value="Ongole">Ongole</option>
+                            <option value="Tirupati">Tirupati</option>
+                            <option value="Vijayawada">Vijayawada</option>
+                            <option value="Guntur">Guntur</option>
+                            <option value="Kadapa">Kadapa</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="lotSelect">Select Parking Lot</label>
+                        <select id="lotSelect" class="form-control" aria-label="Select Parking Lot">
+                            <option value="">Choose a lot...</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label for="checkIn">Check In</label>
+                        <input type="datetime-local" id="checkIn" class="form-control" aria-label="Check In">
+                    </div>
+                    <div class="filter-group">
+                        <label for="checkOut">Check Out</label>
+                        <input type="datetime-local" id="checkOut" class="form-control" aria-label="Check Out">
+                    </div>
+                    <button id="searchSpots" class="search-button">Search Available Spots</button>
+                </div>
+
+                <div class="parking-display">
+                    <div class="lot-info">
+                        <h3 id="lotName">Select a parking lot</h3>
+                        <p id="lotAddr">No lot selected</p>
+                        <div class="lot-stats">
+                            <span>Available: <strong id="availCount">0</strong></span>
+                            <span>Occupied: <strong id="occupCount">0</strong></span>
+                            <span>Rates: <strong id="rates">₹0/hr</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="parking-grid-container">
+                        <div id="parkingGridContainer" class="parking-grid-large">
+                            <!-- Parking spots will be dynamically generated here -->
+                        </div>
+                    </div>
+
+                    <div class="booking-summary">
+                        <h3>Booking Summary</h3>
+                        <div id="bookingSummary">
+                            <p class="empty-state">Select a parking spot to book</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- My Bookings Section -->
+    <section id="myBookings" class="section my-bookings-section">
+        <div class="container">
+            <h2>My Bookings</h2>
+            <div class="bookings-container">
+                <div id="bookingsList">
+                    <div class="empty-state">
+                        <p>📋 No bookings yet. <a href="#booking">Book a parking spot now!</a></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Profile Section -->
+    <section id="profile" class="section profile-section">
+        <div class="container">
+            <h2>My Profile</h2>
+            <div id="profileContent" class="profile-content">
+                <div class="auth-required-message">
+                    <p>👤 Please <a href="#" onclick="openLoginModal(); return false;">login</a> to view your profile</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="section contact-section">
+        <div class="container">
+            <h2>Get in Touch</h2>
+            <div class="contact-content">
+                <div class="contact-info">
+                    <h3>We're Here to Help</h3>
+                    <p>Interested in implementing Smart Parking for your city? Contact us to discuss your parking management needs.</p>
+                    <div class="contact-details">
+                        <div class="contact-item">
+                            <strong>Email:</strong> info@smartparking.in
+                        </div>
+                        <div class="contact-item">
+                            <strong>Phone:</strong> +91 (800) 123-4567
+                        </div>
+                        <div class="contact-item">
+                            <strong>Address:</strong> Pace IT'S, Ongole, A.P, India
+                        </div>
+                    </div>
+                </div>
+                <form class="contact-form" id="contactForm">
+                    <div class="form-group">
+                        <input type="text" id="name" placeholder="Your Name" required>
+                    </div>
+                    <div class="form-group">
+                        <input type="email" id="email" placeholder="Your Email" required>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="message" placeholder="Your Message" rows="5" required></textarea>
+                    </div>
+                    <button type="submit" class="submit-button">Send Message</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Booking Modal -->
+    <div id="bookingModal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2>Confirm Your Booking</h2>
+            <div id="modalBookingDetails">
+                <!-- Booking details will be filled here -->
+            </div>
+            <div class="payment-methods">
+                <h3>Select Payment Method</h3>
+                <div class="payment-options-scrollable">
+                    <button class="payment-btn" data-method="razorpay">💳 Credit/Debit Card</button>
+                    <button class="payment-btn" data-method="upi">📱 UPI</button>
+                    <button class="payment-btn" data-method="netbanking">🏦 Net Banking</button>
+                    <button class="payment-btn" data-method="wallet">💰 Digital Wallet</button>
+                </div>
+            </div>
+            <div class="security-badge">
+                <span>🔒 Secure Payment</span>
+                <span>✓ SSL Encrypted</span>
+                <span>✓ PCI Compliant</span>
+            </div>
+            <button id="confirmBooking" class="confirm-button">Proceed to Payment</button>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="modal">
+        <div class="modal-content login-modal-content">
+            <span class="close">&times;</span>
+            <div class="login-container">
+                <div class="login-header">
+                    <h2>Smart Parking Login</h2>
+                    <p class="login-subtitle">Sign in to book your parking spot</p>
+                </div>
+                <form id="loginForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="loginEmail">📧 Email or Phone</label>
+                        <input type="text" id="loginEmail" placeholder="your.email@example.com or 9876543210" inputmode="email" autocomplete="username" maxlength="100" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="loginPassword">🔐 Password</label>
+                        <input type="password" id="loginPassword" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="login-button">Login Securely</button>
+                </form>
+
+                <div class="signup-prompt">
+                    <p>Don't have an account? <a href="#" id="switchToSignup" class="signup-link">Sign Up Now</a></p>
+                </div>
+
+                <div class="security-info">
+                    <p>🔒 <strong>Your data is secure:</strong> We use encryption to protect your passwords and payment information. Never share your login credentials.</p>
+                    <p class="security-note">✓ Secure password verification • ✓ Session-based authentication • ✓ Encrypted communications</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div id="signupModal" class="modal">
+        <div class="modal-content login-modal-content">
+            <span class="close">&times;</span>
+            <div class="login-container">
+                <div class="login-header">
+                    <h2>Create Your Account</h2>
+                    <p class="login-subtitle">Join Smart Parking today</p>
+                </div>
+                <form id="signupForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="signupName">👤 Full Name</label>
+                        <input type="text" id="signupName" placeholder="Your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupEmail">📧 Email Address</label>
+                        <input type="email" id="signupEmail" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPhone">📱 Phone Number</label>
+                        <input type="text" id="signupPhone" placeholder="" inputmode="numeric" pattern="[0-9]+" maxlength="15" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupPassword">🔐 Password</label>
+                        <input type="password" id="signupPassword" placeholder="Min. 8 chars: Aa1 format" required>
+                        <small class="helper-text">Required: 8+ chars, uppercase, lowercase, numbers</small>
+                    </div>
+                    <div class="form-group">
+                        <label for="signupConfirm">🔐 Confirm Password</label>
+                        <input type="password" id="signupConfirm" placeholder="Confirm password" required>
+                    </div>
+                    <div class="form-options">
+                        <label class="agree-terms">
+                            <input type="checkbox" required> I agree to Terms & Conditions
+                        </label>
+                    </div>
+                    <button type="submit" class="login-button">Create Account</button>
+                </form>
+
+                <div class="signup-prompt">
+                    <p>Already have an account? <a href="#" id="switchToLogin" class="signup-link">Login Here</a></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Profile Modal -->
+    <div id="editProfileModal" class="modal">
+        <div class="modal-content login-modal-content">
+            <span class="close" onclick="closeEditProfileModal()">&times;</span>
+            <div class="login-container">
+                <div class="login-header">
+                    <h2>Edit Your Profile</h2>
+                    <p class="login-subtitle">Update your account information</p>
+                </div>
+                <form id="editProfileForm" class="auth-form">
+                    <div class="form-group">
+                        <label for="editName">👤 Full Name</label>
+                        <input type="text" id="editName" placeholder="Your full name" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editEmail">📧 Email Address</label>
+                        <input type="email" id="editEmail" placeholder="your.email@example.com" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPhone">📱 Phone Number</label>
+                        <input type="text" id="editPhone" placeholder="" inputmode="numeric" pattern="[0-9]+" maxlength="15" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="editPassword">🔐 Change Password (Optional)</label>
+                        <input type="password" id="editPassword" placeholder="Leave blank to keep current password">
+                        <small class="helper-text">If changing password: 8+ chars, uppercase, lowercase, numbers</small>
+                    </div>
+                    <button type="submit" class="login-button">Save Changes</button>
+                    <button type="button" class="cancel-button secondary-cancel-button" onclick="closeEditProfileModal()">Cancel</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <p>&copy; 2026 Smart Parking System. All rights reserved.</p>
+            <div class="footer-links">
+                <a href="#home">Privacy Policy</a>
+                <a href="#home">Terms of Service</a>
+                <a href="#home">Social Media</a>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Real-time Socket.IO Library -->
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+    
+    <script src="booking-data.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

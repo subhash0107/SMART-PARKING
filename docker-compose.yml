@@ -1,0 +1,78 @@
+# ============================================
+# Smart Parking - Docker Compose Configuration
+# ============================================
+# Run with: docker compose up --build
+# Stop with: docker compose down
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: smart-parking-db
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: smartparking
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    healthcheck:
+      test: ["CMD-SHELL", "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' || mongo --quiet --eval 'db.runCommand({ ping: 1 }).ok'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - smart-parking-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: smart-parking-api
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - ./.env
+    environment:
+      NODE_ENV: development
+      PORT: 5000
+      MONGODB_URI: ${MONGODB_URI:-mongodb://admin:password@mongodb:27017/smartparking?authSource=admin}
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-min-32-characters-for-dev}
+      JWT_EXPIRE: ${JWT_EXPIRE:-30d}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-rzp_test_XXXXXXXXXX}
+      RAZORPAY_SECRET: ${RAZORPAY_SECRET:-your_razorpay_test_secret_key}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:8080}
+      ADMIN_PORTAL_URL: ${ADMIN_PORTAL_URL:-http://localhost:3001}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    networks:
+      - smart-parking-network
+
+  frontend:
+    image: nginx:alpine
+    container_name: smart-parking-frontend
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    volumes:
+      - .:/usr/share/nginx/html:ro
+    networks:
+      - smart-parking-network
+
+volumes:
+  mongo-data:
+    driver: local
+  mongo-config:
+    driver: local
+
+networks:
+  smart-parking-network:
+    driver: bridge
