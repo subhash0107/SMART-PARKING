@@ -21,7 +21,11 @@ const parkingLotSchema = new mongoose.Schema({
     city: {
         type: String,
         required: true,
-        enum: ['Vizag', 'Ongole', 'Tirupati', 'Vijayawada', 'Guntur', 'Kadapa']
+        enum: [
+            'Vizag', 'Ongole', 'Tirupati', 'Vijayawada', 'Guntur', 'Kadapa',
+            'Hyderabad', 'Warangal', 'Karimnagar', 'Nizamabad', 'Khammam',
+            'Nalgonda', 'Mahbubnagar', 'Siddipet', 'Suryapet'
+        ]
     },
     
     address: {

@@ -348,34 +348,11 @@ body::before {
     width: 60px;
     height: 80px;
     border-radius: 5px;
-    cursor: pointer;
-    transition: all 0.3s ease;
+    background-color: #dbe3ed;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 24px;
-}
-
-.spot.available {
-    background-color: var(--success-color);
-    color: orange;
-}
-
-.spot.available::after {
-    content: '✓';
-}
-
-.spot.occupied {
-    background-color: var(--danger-color);
-    color: white;
-}
-
-.spot.occupied::after {
-    content: '✕';
-}
-
-.spot:hover {
-    transform: scale(1.1);
 }
 
 /* ============================================
@@ -1122,6 +1099,162 @@ body::before {
     position: relative;
 }
 
+.booking-search-hint {
+    grid-column: 1 / -1;
+    margin: -8px 0 0;
+    color: var(--text-light);
+    font-size: 0.95rem;
+}
+
+.location-search-panel,
+.admin-report-grid > div,
+.admin-facility-management {
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 22px;
+    box-shadow: var(--shadow);
+}
+
+.location-search-controls {
+    display: grid;
+    grid-template-columns: minmax(180px, 1fr) auto;
+    gap: 12px;
+    align-items: end;
+}
+
+.location-search-controls label {
+    grid-column: 1 / -1;
+    font-weight: 600;
+}
+
+#parkingMap {
+    width: 100%;
+    height: 380px;
+    margin: 14px 0;
+    border-radius: 10px;
+    background: #e2e8f0;
+}
+
+#mapStatus,
+#routeSummary {
+    color: var(--text-light);
+    margin: 8px 0;
+}
+
+.nearby-lots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+}
+
+.nearby-lot-card {
+    padding: 14px;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.nearby-lot-card.selected {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15);
+}
+
+.nearby-lot-card button {
+    margin-top: 8px;
+}
+
+.navigation-link {
+    display: inline-block;
+    text-decoration: none;
+    margin-top: 8px;
+}
+
+.admin-section {
+    background: #f1f5f9;
+}
+
+.admin-toolbar,
+.admin-stats,
+.admin-report-grid,
+.admin-facility-form {
+    display: grid;
+    gap: 14px;
+    margin: 18px 0;
+}
+
+.admin-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+}
+
+.admin-toolbar label,
+.admin-facility-form label {
+    display: grid;
+    gap: 6px;
+}
+
+.admin-toolbar input,
+.admin-facility-form input,
+.admin-facility-form select {
+    min-height: 40px;
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+}
+
+.admin-stats {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+
+.admin-stat-card {
+    padding: 18px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+}
+
+.admin-stat-card strong {
+    display: block;
+    color: var(--primary-color);
+    font-size: 1.5rem;
+}
+
+.admin-report-grid {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.admin-report-grid table,
+.admin-facility-management table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.admin-report-grid th,
+.admin-report-grid td,
+.admin-facility-management th,
+.admin-facility-management td {
+    padding: 8px;
+    border-bottom: 1px solid var(--border-color);
+    text-align: left;
+}
+
+.admin-facility-form {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    align-items: end;
+}
+
+.admin-facility-management {
+    overflow-x: auto;
+}
+
+.admin-facility-management button {
+    cursor: pointer;
+}
+
 .booking-filters::before {
     content: '';
     position: absolute;
@@ -1288,6 +1421,11 @@ body::before {
     gap: 15px;
 }
 
+.slot-availability-status {
+    margin: 12px 0 0;
+    color: var(--text-light);
+}
+
 .parking-spot {
     width: 100%;
     aspect-ratio: 1;
@@ -1336,6 +1474,22 @@ body::before {
     background: linear-gradient(135deg, #f59e0b, #d97706);
     cursor: not-allowed;
     opacity: 0.7;
+}
+
+.parking-spot.maintenance,
+.parking-spot.unavailable {
+    background: #64748b;
+    cursor: not-allowed;
+    opacity: 0.75;
+}
+
+.admin-booking-management {
+    margin-top: 22px;
+    padding: 22px;
+    background: #fff;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    overflow-x: auto;
 }
 
 .booking-summary {

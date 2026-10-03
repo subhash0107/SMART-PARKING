@@ -18,6 +18,7 @@
                 <li><a href="#home" class="active">Home</a></li>
                 <li><a href="#booking">Book Parking</a></li>
                 <li><a href="#myBookings">My Bookings</a></li>
+                <li id="adminNavItem" hidden><a href="#adminDashboard">Operator Dashboard</a></li>
                 <li><a href="#contact">Contact</a></li>
                 <li class="user-menu-container">
                     <a href="#" id="userMenuToggle" class="user-menu-icon">👤 Login</a>
@@ -45,20 +46,20 @@
             <p>Revolutionizing Urban Parking with IoT Technology</p>
             <button class="cta-button" onclick="scrollToSection('solution')">Discover Solution</button>
         </div>
-        <div class="hero-graphic">
+        <div class="hero-graphic" aria-hidden="true">
             <div class="parking-grid">
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="Available"></div>
-                <div class="spot available" title="available"></div>
-                <div class="spot available" title="Available"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
+                <div class="spot"></div>
             </div>
         </div>
     </section>
@@ -100,7 +101,7 @@
                 <div class="background-text">
                     <h3>Smart Parking: The Future of Urban Mobility</h3>
                     <p>Smart cities require intelligent parking solutions that save time, reduce congestion, and improve the overall driving experience. Real-time parking monitoring is one of the most practical and impactful applications of IoT (Internet of Things) technology.</p>
-                    <p>Our Smart Parking System leverages cutting-edge technology to create a seamless parking experience for urban drivers and city administrators. With our system deployed in Vizag, Ongole, Tirupati, Vijayawada, Guntur, and Kadapa, we're transforming how people find parking across India's major cities.</p>
+                    <p>Our Smart Parking System helps drivers find and reserve parking around popular destinations in Andhra Pradesh and Telangana. The listed locations are starting points for local operators to verify and manage.</p>
                     
                     <h4>🎯 Key Benefits</h4>
                     <ul class="benefits-list">
@@ -108,8 +109,8 @@
                         <li>✓ Reduced time spent searching for spots (up to 60% time savings)</li>
                         <li>✓ Lower traffic congestion and emissions (45% reduction in traffic)</li>
                         <li>✓ Improved city planning and infrastructure management</li>
-                        <li>✓ Fair pricing: Standardized ₹10/hour rates across all locations</li>
-                        <li>✓ Advanced IoT sensor technology for 99% accuracy</li>
+                        <li>✓ Facility-specific hourly rates shown before reservation</li>
+                        <li>✓ Live status from reservations and operator-managed slot updates</li>
                     </ul>
                     
                     <h4>🔒 Security & Safety First</h4>
@@ -126,9 +127,9 @@
                     
                     <div class="coverage-card">
                         <h4 class="coverage-heading">📱 Our Coverage</h4>
-                        <p class="coverage-item"><strong>6 Premium Cities:</strong> Vizag • Ongole • Tirupati • Vijayawada • Guntur • Kadapa</p>
-                        <p class="coverage-item"><strong>10 Managed Parking Lots:</strong> Premium locations with real-time monitoring</p>
-                        <p class="coverage-item"><strong>100+ Parking Spots:</strong> Managed with IoT sensors and live availability tracking</p>
+                        <p class="coverage-item"><strong>15 cities:</strong> Andhra Pradesh destinations plus Hyderabad, Warangal, Karimnagar, Nizamabad, Khammam, Nalgonda, Mahbubnagar, Siddipet, and Suryapet.</p>
+                        <p class="coverage-item"><strong>Popular areas:</strong> Charminar, HITEC City, Gachibowli, Secunderabad, Thousand Pillar Temple, Bhadrakali Temple, and more.</p>
+                        <p class="coverage-item"><strong>Development sample locations:</strong> Operators must confirm each facility, address, coordinates, capacity, and live status before accepting reservations.</p>
                     </div>
                 </div>
             </div>
@@ -237,12 +238,21 @@
                             <option value="Vijayawada">Vijayawada</option>
                             <option value="Guntur">Guntur</option>
                             <option value="Kadapa">Kadapa</option>
+                            <option value="Hyderabad">Hyderabad</option>
+                            <option value="Warangal">Warangal</option>
+                            <option value="Karimnagar">Karimnagar</option>
+                            <option value="Nizamabad">Nizamabad</option>
+                            <option value="Khammam">Khammam</option>
+                            <option value="Nalgonda">Nalgonda</option>
+                            <option value="Mahbubnagar">Mahbubnagar</option>
+                            <option value="Siddipet">Siddipet</option>
+                            <option value="Suryapet">Suryapet</option>
                         </select>
                     </div>
                     <div class="filter-group">
-                        <label for="lotSelect">Select Parking Lot</label>
-                        <select id="lotSelect" class="form-control" aria-label="Select Parking Lot">
-                            <option value="">Choose a lot...</option>
+                        <label for="areaSelect">Popular area or landmark</label>
+                        <select id="areaSelect" class="form-control" aria-label="Popular area or landmark" disabled>
+                            <option value="">Choose a city first...</option>
                         </select>
                     </div>
                     <div class="filter-group">
@@ -254,12 +264,28 @@
                         <input type="datetime-local" id="checkOut" class="form-control" aria-label="Check Out">
                     </div>
                     <button id="searchSpots" class="search-button">Search Available Spots</button>
+                    <p class="booking-search-hint">Choose a city, set your booking times, and search. Then select a facility to load its numbered slots.</p>
+                </div>
+
+                <div class="location-search-panel">
+                    <div class="location-search-controls">
+                        <label for="destinationSearch">Search by destination or address</label>
+                        <input id="destinationSearch" class="form-control" type="search" placeholder="Enter a destination or area" autocomplete="off">
+                        <button id="useMyLocation" class="search-button" type="button">Use my location</button>
+                        <button id="enableNotifications" class="search-button" type="button">Enable browser notifications</button>
+                    </div>
+                    <p id="mapStatus" role="status">Add a Google Maps API key to enable maps, places and route estimates.</p>
+                    <div id="parkingMap" aria-label="Map showing nearby parking facilities"></div>
+                    <h3>Parking near your destination</h3>
+                    <div id="nearbyLots" class="nearby-lots" aria-live="polite"></div>
+                    <p id="routeSummary" role="status"></p>
+                    <a id="navigationLink" class="search-button navigation-link" target="_blank" rel="noopener noreferrer" hidden>Navigate to selected parking</a>
                 </div>
 
                 <div class="parking-display">
                     <div class="lot-info">
-                        <h3 id="lotName">Select a parking lot</h3>
-                        <p id="lotAddr">No lot selected</p>
+                        <h3 id="lotName">Select a parking facility</h3>
+                        <p id="lotAddr">Choose a facility from the search results.</p>
                         <div class="lot-stats">
                             <span>Available: <strong id="availCount">0</strong></span>
                             <span>Occupied: <strong id="occupCount">0</strong></span>
@@ -272,6 +298,9 @@
                             <!-- Parking spots will be dynamically generated here -->
                         </div>
                     </div>
+                    <p id="slotAvailabilityStatus" class="slot-availability-status" role="status" aria-live="polite">
+                        Choose a facility to load its live numbered slots.
+                    </p>
 
                     <div class="booking-summary">
                         <h3>Booking Summary</h3>
@@ -280,6 +309,50 @@
                         </div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </section>
+
+    <section id="adminDashboard" class="section admin-section" hidden>
+        <div class="container">
+            <h2>Parking Operator Dashboard</h2>
+            <p>Live occupancy, parking demand reports, and facility/slot management.</p>
+            <div class="admin-toolbar">
+                <label>Report from <input id="reportFrom" type="date"></label>
+                <label>through <input id="reportTo" type="date"></label>
+                <button id="refreshAdminDashboard" class="search-button" type="button">Refresh report</button>
+            </div>
+            <div id="adminStats" class="admin-stats"></div>
+            <div class="admin-report-grid">
+                <div><h3>Current occupancy</h3><div id="occupancyReport"></div></div>
+                <div><h3>Parking demand by facility</h3><div id="demandReport"></div></div>
+                <div><h3>Bookings by day</h3><div id="dailyReport"></div></div>
+            </div>
+            <button id="downloadAdminReport" class="search-button" type="button">Download CSV report</button>
+            <div class="admin-booking-management">
+                <h3>Recent reservations</h3>
+                <div id="adminBookings"></div>
+            </div>
+            <div class="admin-facility-management">
+                <h3>Facility and slot management</h3>
+                <form id="facilityForm" class="admin-facility-form">
+                    <label>Facility ID <input name="lotId" required></label>
+                    <label>Name <input name="name" required></label>
+                    <label>City <select name="city" required>
+                        <option>Vizag</option><option>Ongole</option><option>Tirupati</option>
+                        <option>Vijayawada</option><option>Guntur</option><option>Kadapa</option>
+                        <option>Hyderabad</option><option>Warangal</option><option>Karimnagar</option>
+                        <option>Nizamabad</option><option>Khammam</option><option>Nalgonda</option>
+                        <option>Mahbubnagar</option><option>Siddipet</option><option>Suryapet</option>
+                    </select></label>
+                    <label>Address <input name="address" required></label>
+                    <label>Latitude <input name="latitude" type="number" step="any" required></label>
+                    <label>Longitude <input name="longitude" type="number" step="any" required></label>
+                    <label>Total slots <input name="totalSpots" type="number" min="1" required></label>
+                    <label>Rate per hour (₹) <input name="ratePerHour" type="number" min="1" required></label>
+                    <button class="search-button" type="submit">Add facility</button>
+                </form>
+                <div id="facilityReport"></div>
             </div>
         </div>
     </section>
@@ -355,7 +428,7 @@
                 <!-- Booking details will be filled here -->
             </div>
             <div class="payment-methods">
-                <h3>Select Payment Method</h3>
+                <h3>Select Payment Method (payment remains pending)</h3>
                 <div class="payment-options-scrollable">
                     <button class="payment-btn" data-method="razorpay">💳 Credit/Debit Card</button>
                     <button class="payment-btn" data-method="upi">📱 UPI</button>
@@ -368,7 +441,7 @@
                 <span>✓ SSL Encrypted</span>
                 <span>✓ PCI Compliant</span>
             </div>
-            <button id="confirmBooking" class="confirm-button">Proceed to Payment</button>
+            <button id="confirmBooking" class="confirm-button">Create Reservation</button>
         </div>
     </div>
 
@@ -500,6 +573,7 @@
     <!-- Real-time Socket.IO Library -->
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     
+    <script src="map-config.example.js"></script>
     <script src="booking-data.js"></script>
     <script src="script.js"></script>
 </body>

@@ -8,6 +8,8 @@ const Booking = require('../models/Booking');
 const User = require('../models/User');
 const ParkingLot = require('../models/ParkingLot');
 const authMiddleware = require('../middleware/auth');
+const mongoose = require('mongoose');
+const ParkingSpot = require('../models/ParkingSpot');
 
 // Track concurrent bookings to prevent double booking
 const concurrentBookingAttempts = new Map();
@@ -33,10 +35,15 @@ async function isSpotAvailable(lotId, spotNumber, checkIn, checkOut, excludeBook
 
 // Helper: Get real-time spot status
 async function getSpotStatus(lotId, spotNumber) {
+    const sensorStatus = await ParkingSpot.findOne({ lotId, spotNumber }).select('status');
+    if (sensorStatus && sensorStatus.status !== 'available') return sensorStatus.status;
+
     const booking = await Booking.findOne({
         lotId: lotId,
         spotNumber: spotNumber,
-        status: { $ne: 'cancelled' }
+        status: { $nin: ['cancelled', 'no-show'] },
+        checkIn: { $lte: new Date() },
+        checkOut: { $gt: new Date() }
     }).select('status paymentDetails.paymentStatus checkIn checkOut');
 
     if (!booking) return 'available';
@@ -44,8 +51,17 @@ async function getSpotStatus(lotId, spotNumber) {
     return 'occupied';
 }
 
+async function findParkingLot(identifier) {
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+        const byId = await ParkingLot.findById(identifier);
+        if (byId) return byId;
+    }
+    return ParkingLot.findOne({ lotId: identifier });
+}
+
 // Create new booking with real-time conflict detection
 router.post('/', authMiddleware, async (req, res) => {
+    let lockedSpotKey = null;
     try {
         const { lotId, spotNumber, checkIn, checkOut, paymentMethod, vehicleNumber, vehicleType } = req.body;
         
@@ -62,7 +78,7 @@ router.post('/', authMiddleware, async (req, res) => {
         const checkInDate = new Date(checkIn);
         const checkOutDate = new Date(checkOut);
 
-        if (checkInDate >= checkOutDate) {
+        if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime()) || checkInDate >= checkOutDate) {
             return res.status(400).json({
                 status: 'ERROR',
                 message: 'Check-out time must be after check-in time',
@@ -78,7 +94,7 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
 
-        const lot = await ParkingLot.findById(lotId);
+        const lot = await findParkingLot(lotId);
         if (!lot) {
             return res.status(404).json({
                 status: 'ERROR',
@@ -87,20 +103,18 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
 
-        // Real-time availability check - CRITICAL for preventing double bookings
-        const isAvailable = await isSpotAvailable(lotId, spotNumber, checkInDate, checkOutDate);
-        if (!isAvailable) {
-            return res.status(409).json({
+        const parsedSpotNumber = Number(spotNumber);
+        if (!Number.isInteger(parsedSpotNumber) || parsedSpotNumber < 1 || parsedSpotNumber > lot.totalSpots) {
+            return res.status(400).json({
                 status: 'ERROR',
-                message: 'Spot is not available for the selected time period',
-                code: 'SPOT_UNAVAILABLE',
-                suggestedSpots: await getAvailableSpots(lotId, checkInDate, checkOutDate)
+                message: 'Invalid parking spot number',
+                code: 'INVALID_SPOT'
             });
         }
 
-        // Prevent concurrent booking attempts for same spot
-        const spoKey = `${lotId}-${spotNumber}`;
-        if (concurrentBookingAttempts.has(spoKey)) {
+        const bookingLotId = lot._id;
+        const spotKey = `${bookingLotId}-${parsedSpotNumber}`;
+        if (concurrentBookingAttempts.has(spotKey)) {
             return res.status(429).json({
                 status: 'ERROR',
                 message: 'Another user is booking this spot. Please try another spot.',
@@ -109,11 +123,31 @@ router.post('/', authMiddleware, async (req, res) => {
             });
         }
 
-        // Mark spot as being booked
-        concurrentBookingAttempts.set(spoKey, { userId: req.userId, timestamp: Date.now() });
-        
-        // Clean up after 30 seconds if booking incomplete
-        setTimeout(() => concurrentBookingAttempts.delete(spoKey), 30000);
+        concurrentBookingAttempts.set(spotKey, { userId: req.userId, timestamp: Date.now() });
+        lockedSpotKey = spotKey;
+
+        const managedSpot = await ParkingSpot.findOne({ lotId: bookingLotId, spotNumber: parsedSpotNumber });
+        if (managedSpot && managedSpot.status !== 'available') {
+            concurrentBookingAttempts.delete(spotKey);
+            lockedSpotKey = null;
+            return res.status(409).json({
+                status: 'ERROR',
+                message: `Spot is currently ${managedSpot.status}`,
+                code: 'SPOT_UNAVAILABLE'
+            });
+        }
+
+        const isAvailable = await isSpotAvailable(bookingLotId, parsedSpotNumber, checkInDate, checkOutDate);
+        if (!isAvailable) {
+            concurrentBookingAttempts.delete(spotKey);
+            lockedSpotKey = null;
+            return res.status(409).json({
+                status: 'ERROR',
+                message: 'Spot is not available for the selected time period',
+                code: 'SPOT_UNAVAILABLE',
+                suggestedSpots: await getAvailableSpots(bookingLotId, checkInDate, checkOutDate)
+            });
+        }
 
         // Calculate cost
         const durationMs = checkOutDate - checkInDate;
@@ -129,8 +163,8 @@ router.post('/', authMiddleware, async (req, res) => {
         const booking = new Booking({
             bookingId: bookingRef,
             userId: req.userId,
-            lotId: lotId,
-            spotNumber: spotNumber,
+            lotId: bookingLotId,
+            spotNumber: parsedSpotNumber,
             checkIn: checkInDate,
             checkOut: checkOutDate,
             duration: {
@@ -161,13 +195,15 @@ router.post('/', authMiddleware, async (req, res) => {
 
         // Emit real-time booking event
         if (global.io) {
-            global.io.emit('booking:created', {
-                bookingId: booking.bookingId,
-                lotId: lotId,
-                spotNumber: spotNumber,
+            global.io.to(`lot:${lot.lotId}`).emit('booking:created', {
+                lotId: lot.lotId,
+                spotNumber: parsedSpotNumber,
                 status: booking.status
             });
         }
+
+        concurrentBookingAttempts.delete(spotKey);
+        lockedSpotKey = null;
         
         res.status(201).json({
             status: 'SUCCESS',
@@ -183,6 +219,7 @@ router.post('/', authMiddleware, async (req, res) => {
             }
         });
     } catch (error) {
+        if (lockedSpotKey) concurrentBookingAttempts.delete(lockedSpotKey);
         console.error('Booking creation error:', error);
         res.status(500).json({
             status: 'ERROR',
@@ -268,27 +305,32 @@ router.get('/user/:userId', authMiddleware, async (req, res) => {
 // Get available spots (real-time)
 async function getAvailableSpots(lotId, checkInDate, checkOutDate, limit = 5) {
     try {
+        const lot = await findParkingLot(lotId);
+        if (!lot) throw new Error('Parking lot not found');
+
         const bookedSpots = await Booking.find({
-            lotId: lotId,
+            lotId: lot._id,
             status: { $ne: 'cancelled' },
             $or: [
                 { checkIn: { $lt: checkOutDate }, checkOut: { $gt: checkInDate } }
             ]
         }).distinct('spotNumber');
-
-        const lot = await ParkingLot.findById(lotId);
-        if (!lot) return [];
+        const blockedSpots = await ParkingSpot.find({
+            lotId: lot._id,
+            status: { $ne: 'available' }
+        }).distinct('spotNumber');
+        const unavailable = new Set([...bookedSpots, ...blockedSpots]);
 
         const availableSpots = [];
         for (let i = 1; i <= lot.totalSpots && availableSpots.length < limit; i++) {
-            if (!bookedSpots.includes(i)) {
+            if (!unavailable.has(i)) {
                 availableSpots.push({ spotNumber: i, available: true });
             }
         }
         return availableSpots;
     } catch (error) {
         console.error('Error fetching available spots:', error);
-        return [];
+        throw error;
     }
 }
 
@@ -305,10 +347,20 @@ router.get('/available/spots/:lotId', async (req, res) => {
             });
         }
 
+        const checkInDate = new Date(checkIn);
+        const checkOutDate = new Date(checkOut);
+        if (Number.isNaN(checkInDate.getTime()) || Number.isNaN(checkOutDate.getTime()) || checkInDate >= checkOutDate) {
+            return res.status(400).json({
+                status: 'ERROR',
+                message: 'A valid check-in and check-out range is required',
+                code: 'INVALID_DATE_RANGE'
+            });
+        }
+
         const availableSpots = await getAvailableSpots(
             lotId,
-            new Date(checkIn),
-            new Date(checkOut),
+            checkInDate,
+            checkOutDate,
             20
         );
 
@@ -346,7 +398,7 @@ router.put('/:bookingId', authMiddleware, async (req, res) => {
             { bookingId: req.params.bookingId, userId: req.userId },
             { status: status, updatedAt: new Date() },
             { new: true }
-        ).populate('lotId', 'name address');
+        ).populate('lotId', 'name address lotId');
         
         if (!booking) {
             return res.status(404).json({
@@ -358,9 +410,10 @@ router.put('/:bookingId', authMiddleware, async (req, res) => {
 
         // Emit real-time status update
         if (global.io) {
-            global.io.emit('booking:updated', {
+            global.io.to(`booking:${booking.bookingId}`).emit('booking:updated', {
                 bookingId: booking.bookingId,
                 status: booking.status,
+                lotId: booking.lotId.lotId,
                 updatedAt: new Date().toISOString()
             });
         }
@@ -423,10 +476,17 @@ router.delete('/:bookingId', authMiddleware, async (req, res) => {
 
         // Emit real-time cancellation event
         if (global.io) {
-            global.io.emit('booking:cancelled', {
+            const lot = await ParkingLot.findById(updatedBooking.lotId);
+            global.io.to(`booking:${updatedBooking.bookingId}`).emit('booking:cancelled', {
                 bookingId: updatedBooking.bookingId,
+                lotId: lot.lotId,
                 spotNumber: updatedBooking.spotNumber,
                 refund: refundAmount,
+                cancelledAt: new Date().toISOString()
+            });
+            global.io.to(`lot:${lot.lotId}`).emit('booking:cancelled', {
+                lotId: lot.lotId,
+                spotNumber: updatedBooking.spotNumber,
                 cancelledAt: new Date().toISOString()
             });
         }

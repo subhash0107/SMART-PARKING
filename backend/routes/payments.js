@@ -293,6 +293,17 @@ router.post('/verify', authMiddleware, async (req, res) => {
             });
         }
 
+        global.io?.to(`booking:${booking.bookingId}`).emit('payment:confirmed', {
+            bookingId: booking.bookingId,
+            orderId,
+            paymentId
+        });
+        global.io?.to(`booking:${booking.bookingId}`).emit('booking:updated', {
+            bookingId: booking.bookingId,
+            status: booking.status,
+            updatedAt: new Date().toISOString()
+        });
+
         // Mark payment as processed
         processedPayments.set(duplicateKey, { timestamp: Date.now(), bookingId: booking.bookingId });
 
@@ -385,31 +396,43 @@ router.post('/webhook/razorpay', async (req, res) => {
             const orderId = payload.payment.entity.order_id;
             const paymentId = payload.payment.entity.id;
             
-            await Booking.findOneAndUpdate(
+            const booking = await Booking.findOneAndUpdate(
                 { 'paymentDetails.orderId': orderId },
                 {
                     'paymentDetails.transactionId': paymentId,
                     'paymentDetails.paymentStatus': 'completed',
                     'paymentDetails.paidAt': new Date(),
                     status: 'confirmed'
-                }
+                },
+                { new: true }
             );
 
-            // Emit real-time event
-            if (global.io) {
-                global.io.emit('payment:confirmed', { orderId, paymentId });
+            if (global.io && booking) {
+                global.io.to(`booking:${booking.bookingId}`).emit('payment:confirmed', {
+                    bookingId: booking.bookingId,
+                    orderId,
+                    paymentId
+                });
+                global.io.to(`booking:${booking.bookingId}`).emit('booking:updated', {
+                    bookingId: booking.bookingId,
+                    status: booking.status,
+                    updatedAt: new Date().toISOString()
+                });
             }
         } else if (event === 'payment.failed') {
             const orderId = payload.payment.entity.order_id;
             
-            await Booking.findOneAndUpdate(
+            const booking = await Booking.findOneAndUpdate(
                 { 'paymentDetails.orderId': orderId },
-                { 'paymentDetails.paymentStatus': 'failed' }
+                { 'paymentDetails.paymentStatus': 'failed' },
+                { new: true }
             );
 
-            // Emit real-time event
-            if (global.io) {
-                global.io.emit('payment:failed', { orderId });
+            if (global.io && booking) {
+                global.io.to(`booking:${booking.bookingId}`).emit('payment:failed', {
+                    bookingId: booking.bookingId,
+                    orderId
+                });
             }
         }
 

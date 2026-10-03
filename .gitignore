@@ -17,6 +17,7 @@ yarn.lock
 .env.*.local
 .env.development
 .env.production
+map-config.js
 
 # ============================================
 # IDE & Editor

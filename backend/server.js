@@ -12,6 +12,11 @@ const dotenv = require('dotenv');
 const path = require('path');
 const http = require('http');
 const socketIO = require('socket.io');
+const ParkingLot = require('./models/ParkingLot');
+const defaultLots = require('./config/defaultLots');
+const ParkingSpot = require('./models/ParkingSpot');
+const Booking = require('./models/Booking');
+const jwt = require('jsonwebtoken');
 
 // Load environment variables
 dotenv.config();
@@ -49,15 +54,16 @@ io.on('connection', (socket) => {
     });
 
     // Subscribe to booking updates
-    socket.on('subscribe:booking', (bookingId) => {
-        socket.join(`booking:${bookingId}`);
-        console.log(`✓ Client subscribed to booking: ${bookingId}`);
-    });
-
-    // Subscribe to user updates
-    socket.on('subscribe:user', (userId) => {
-        socket.join(`user:${userId}`);
-        console.log(`✓ Client subscribed to user: ${userId}`);
+    socket.on('subscribe:booking', async (bookingId) => {
+        try {
+            const token = socket.handshake.auth?.token;
+            if (typeof token !== 'string') return;
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key');
+            const booking = await Booking.findOne({ bookingId, userId: decoded.userId }).select('_id');
+            if (booking) socket.join(`booking:${bookingId}`);
+        } catch (error) {
+            console.error(`Booking subscription failed for ${socket.id}:`, error.message);
+        }
     });
 
     // Real-time spot status request
@@ -151,21 +157,93 @@ app.use((req, res, next) => {
 // Database Connection
 // ============================================
 
+let databaseReconnectTimer = null;
+let isDatabaseConnecting = false;
+let isDatabaseInitialized = false;
+let databaseInitializationError = 'Database connection is unavailable';
+
+const scheduleDatabaseReconnect = () => {
+    if (databaseReconnectTimer || isDatabaseConnecting || mongoose.connection.readyState === 1) return;
+    databaseReconnectTimer = setTimeout(() => {
+        databaseReconnectTimer = null;
+        connectDB();
+    }, 5000);
+};
+
 const connectDB = async () => {
+    if (isDatabaseConnecting || mongoose.connection.readyState === 1) return;
+    isDatabaseConnecting = true;
+    isDatabaseInitialized = false;
+
     try {
         const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/smartparking';
         
         await mongoose.connect(mongoURI, {
-            useNewUrlParser: true,
-            useUnifiedTopology: true,
             serverSelectionTimeoutMS: 5000,
             socketTimeoutMS: 45000,
         });
 
         console.log('✓ MongoDB Connected Successfully');
+        if (process.env.NODE_ENV !== 'production') {
+            for (const lotData of defaultLots) {
+                const existingLot = await ParkingLot.findOne({ lotId: lotData.lotId });
+                if (existingLot) {
+                    const [bookedHigherSpot, blockedHigherSpot] = await Promise.all([
+                        Booking.exists({
+                            lotId: existingLot._id,
+                            spotNumber: { $gt: lotData.totalSpots },
+                            status: { $nin: ['cancelled', 'no-show'] },
+                            checkOut: { $gt: new Date() }
+                        }),
+                        ParkingSpot.exists({
+                            lotId: existingLot._id,
+                            spotNumber: { $gt: lotData.totalSpots },
+                            status: { $ne: 'available' }
+                        })
+                    ]);
+                    if (bookedHigherSpot || blockedHigherSpot) {
+                        throw new Error(
+                            `Cannot reduce ${lotData.lotId} to ${lotData.totalSpots} slots: a higher-numbered slot is booked or unavailable. Resolve those reservations/slot statuses, then restart.`
+                        );
+                    }
+                }
+
+                const { totalSpots, coordinates, ...lotDefaults } = lotData;
+                const lot = await ParkingLot.findOneAndUpdate(
+                    { lotId: lotData.lotId },
+                    {
+                        $set: {
+                            totalSpots,
+                            availableSpots: totalSpots,
+                            coordinates
+                        },
+                        $setOnInsert: lotDefaults
+                    },
+                    { new: true, upsert: true, setDefaultsOnInsert: true }
+                );
+                await ParkingSpot.bulkWrite(Array.from({ length: lot.totalSpots }, (_, index) => ({
+                    updateOne: {
+                        filter: { lotId: lot._id, spotNumber: index + 1 },
+                        update: { $setOnInsert: { status: 'available' } },
+                        upsert: true
+                    }
+                })));
+                await ParkingSpot.deleteMany({
+                    lotId: lot._id,
+                    spotNumber: { $gt: lot.totalSpots }
+                });
+            }
+            const totalSeedSlots = defaultLots.reduce((total, lot) => total + lot.totalSpots, 0);
+            console.log(`✓ Development parking facilities and ${totalSeedSlots} slots are ready`);
+        }
+        isDatabaseInitialized = true;
+        databaseInitializationError = '';
     } catch (error) {
-        console.error('✗ Database Connection Error:', error.message);
-        setTimeout(connectDB, 5000); // Retry connection after 5 seconds
+        databaseInitializationError = error.message;
+        console.error('✗ Database initialization failed:', error.message);
+    } finally {
+        isDatabaseConnecting = false;
+        scheduleDatabaseReconnect();
     }
 };
 
@@ -173,8 +251,10 @@ connectDB();
 
 // Monitor database connection
 mongoose.connection.on('disconnected', () => {
+    isDatabaseInitialized = false;
+    databaseInitializationError = 'Database connection is unavailable';
     console.error('⚠  MongoDB Disconnected');
-    connectDB();
+    scheduleDatabaseReconnect();
 });
 
 // ============================================
@@ -186,9 +266,35 @@ app.get('/api/health', (req, res) => {
     res.json({
         status: 'SUCCESS',
         message: 'Smart Parking API is running',
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        initialized: isDatabaseInitialized,
+        initializationError: databaseInitializationError || undefined,
         activeConnections: io.engine.clientsCount,
         timestamp: new Date().toISOString()
     });
+});
+
+app.get('/api/ready', (req, res) => {
+    const applicationReady = mongoose.connection.readyState === 1 && isDatabaseInitialized;
+    res.status(applicationReady ? 200 : 503).json({
+        status: applicationReady ? 'SUCCESS' : 'ERROR',
+        ready: applicationReady,
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
+        message: applicationReady
+            ? 'Smart Parking API is ready'
+            : databaseInitializationError || 'Database connection is unavailable'
+    });
+});
+
+app.use('/api', (req, res, next) => {
+    if (mongoose.connection.readyState !== 1 || !isDatabaseInitialized) {
+        return res.status(503).json({
+            status: 'ERROR',
+            message: databaseInitializationError || 'Database connection is unavailable. Please try again shortly.',
+            code: mongoose.connection.readyState === 1 ? 'DATABASE_INITIALIZATION_FAILED' : 'DATABASE_UNAVAILABLE'
+        });
+    }
+    next();
 });
 
 // Route Modules

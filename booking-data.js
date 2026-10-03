@@ -103,13 +103,10 @@ function getLotsForCity(city) {
 function generateParkingSpots(totalSpots) {
     const spots = [];
     for (let i = 1; i <= totalSpots; i++) {
-        const statuses = ['available', 'occupied', 'available'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        
         spots.push({
             id: `SPOT-${String(i).padStart(3, '0')}`,
             number: i,
-            status: randomStatus,
+            status: 'unavailable',
             floor: Math.ceil(i / 30)
         });
     }

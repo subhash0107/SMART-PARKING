@@ -76,7 +76,11 @@ const userSchema = new mongoose.Schema({
         street: String,
         city: {
             type: String,
-            enum: ['Vizag', 'Ongole', 'Tirupati', 'Vijayawada', 'Guntur', 'Kadapa']
+            enum: [
+                'Vizag', 'Ongole', 'Tirupati', 'Vijayawada', 'Guntur', 'Kadapa',
+                'Hyderabad', 'Warangal', 'Karimnagar', 'Nizamabad', 'Khammam',
+                'Nalgonda', 'Mahbubnagar', 'Siddipet', 'Suryapet'
+            ]
         },
         state: String,
         zipCode: String

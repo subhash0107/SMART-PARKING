@@ -16,16 +16,27 @@
 ```http
 GET /api/health
 ```
-**Purpose:** Verify API is running  
+**Purpose:** Verify the API process is running. The response includes the MongoDB connection state.
 **Auth:** No  
 **Response:**
 ```json
 {
   "status": "SUCCESS",
   "message": "Smart Parking API is running",
+  "database": "connected",
+  "activeConnections": 0,
   "timestamp": "2024-04-15T10:30:00.000Z"
 }
 ```
+
+### Readiness Check
+```http
+GET /api/ready
+```
+**Purpose:** Verify MongoDB is connected and database initialization/seeding completed. Returns `503` while disconnected or if safe development-data initialization is blocked.
+**Auth:** No
+
+Database-backed API routes also return `503` with code `DATABASE_UNAVAILABLE` until MongoDB connects, or `DATABASE_INITIALIZATION_FAILED` if initialization did not complete.
 
 ---
 
@@ -152,7 +163,7 @@ GET /api/lots?city=Vizag
 **Auth:** No  
 **Query Parameters:**
 - `city` (optional): Filter by city
-  - Values: `Vizag`, `Ongole`, `Tirupati`, `Vijayawada`, `Guntur`, `Kadapa`
+  - Values: `Vizag`, `Ongole`, `Tirupati`, `Vijayawada`, `Guntur`, `Kadapa`, `Hyderabad`, `Warangal`, `Karimnagar`, `Nizamabad`, `Khammam`, `Nalgonda`, `Mahbubnagar`, `Siddipet`, `Suryapet`
 
 **Response:**
 ```json
@@ -229,6 +240,17 @@ GET /api/lots/:lotId
 - **Vijayawada:** VJD001 (Ambedkar Park)
 - **Guntur:** GNT001 (Pankala Narasimha Temple)
 - **Kadapa:** KDP001 (Gandikota Fort)
+- **Hyderabad:** HYD001 (Charminar), HYD002 (HITEC City), HYD003 (Gachibowli), HYD004 (Secunderabad), HYD005 (Hussain Sagar), HYD006 (Banjara Hills), HYD007 (Golconda Fort)
+- **Warangal:** WGL001 (Thousand Pillar Temple), WGL002 (Bhadrakali Temple), WGL003 (Warangal Fort), WGL004 (Hanamkonda)
+- **Karimnagar:** KRM001 (Clock Tower)
+- **Nizamabad:** NZB001 (Fort Area)
+- **Khammam:** KHM001 (Fort Area)
+- **Nalgonda:** NLG001 (Clock Tower)
+- **Mahbubnagar:** MBN001 (Pillalamarri)
+- **Siddipet:** SDP001 (Bus Station Area)
+- **Suryapet:** SPT001 (Bus Station Area)
+
+Development seed locations and capacities are examples only; operators must verify them before opening the facilities for real reservations.
 
 **Response:** Same as Get All Lots (single lot object)
 

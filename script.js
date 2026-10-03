@@ -8,6 +8,656 @@ let selectedSpot = null;
 let bookingStorage = [];
 let currentUser = null;
 let isUserAuthenticated = false;
+const API_BASE_URL = 'http://localhost:5000/api';
+let parkingMap = null;
+let directionsService = null;
+let directionsRenderer = null;
+let placesAutocomplete = null;
+let searchCenter = null;
+let mapMarkers = [];
+let mapFacilities = [];
+let adminRefreshTimer = null;
+let latestAdminAnalytics = null;
+let activeLotSearch = null;
+let activeSpotAvailabilityRequest = null;
+
+const CITY_AREAS = {
+    Vizag: ['RK Beach', 'Kailasagiri', 'VUDA Park', 'MVP Colony', 'Dwaraka Nagar'],
+    Ongole: ['Gandhi Park', 'Ongole Bull Park', 'Railway Station', 'Trunk Road'],
+    Tirupati: ['Tirumala Bypass', 'Srinivasa Theatre Road', 'Deer Park', 'Railway Station'],
+    Vijayawada: ['Kanaka Durga Temple', 'PNBS Bus Station', 'Benz Circle', 'Prakasam Barrage'],
+    Guntur: ['Mangalagiri Temple', 'Guntur Railway Station', 'Arundelpet', 'Brodipet'],
+    Kadapa: ['Gandikota Fort', 'Ameen Peer Dargah', 'Kadapa Railway Station'],
+    Hyderabad: ['Charminar', 'HITEC City', 'Gachibowli', 'Secunderabad', 'Banjara Hills', 'Golconda Fort', 'Hussain Sagar'],
+    Warangal: ['Thousand Pillar Temple', 'Bhadrakali Temple', 'Warangal Fort', 'Hanamkonda'],
+    Karimnagar: ['Karimnagar Clock Tower', 'Lower Manair Dam', 'Mankammathota'],
+    Nizamabad: ['Nizamabad Fort', 'Nizamabad Railway Station', 'Bodhan Road'],
+    Khammam: ['Khammam Fort', 'Khammam Railway Station', 'Wyra Road'],
+    Nalgonda: ['Nalgonda Clock Tower', 'Nalgonda Railway Station', 'Devarakonda Road'],
+    Mahbubnagar: ['Pillalamarri Banyan Tree', 'Mahbubnagar Railway Station', 'Clock Tower'],
+    Siddipet: ['Siddipet Bus Station', 'Komuravelli Mallanna Temple', 'Ponnala'],
+    Suryapet: ['Suryapet Bus Station', 'Suryapet Clock Tower', 'NH 65']
+};
+
+const AREA_CENTERS = {
+    'Charminar': [17.3616, 78.4747],
+    'HITEC City': [17.4435, 78.3772],
+    'Gachibowli': [17.4401, 78.3489],
+    'Secunderabad': [17.4399, 78.4983],
+    'Banjara Hills': [17.4156, 78.4347],
+    'Golconda Fort': [17.3833, 78.4011],
+    'Hussain Sagar': [17.4239, 78.4738],
+    'Thousand Pillar Temple': [17.9957, 79.5793],
+    'Bhadrakali Temple': [17.9757, 79.5754],
+    'Warangal Fort': [17.9689, 79.6020],
+    'Hanamkonda': [18.0000, 79.5830],
+    'Karimnagar Clock Tower': [18.4386, 79.1288],
+    'Nizamabad Fort': [18.6733, 78.1000],
+    'Khammam Fort': [17.2473, 80.1514],
+    'Nalgonda Clock Tower': [17.0575, 79.2684],
+    'Pillalamarri Banyan Tree': [16.7272, 77.9997],
+    'Siddipet Bus Station': [18.1018, 78.8520],
+    'Suryapet Bus Station': [17.1405, 79.6236]
+};
+
+function populateCityAreas(city) {
+    const areaSelect = document.getElementById('areaSelect');
+    if (!areaSelect) return;
+    areaSelect.replaceChildren(new Option(city ? 'Choose a popular area...' : 'Choose a city first...', ''));
+    (CITY_AREAS[city] || []).forEach(area => {
+        const option = new Option(area, area);
+        if (AREA_CENTERS[area]) option.dataset.center = JSON.stringify(AREA_CENTERS[area]);
+        areaSelect.add(option);
+    });
+    areaSelect.disabled = !city;
+}
+
+function initGoogleParkingMap() {
+    const status = document.getElementById('mapStatus');
+    if (!window.google?.maps) {
+        if (status) status.textContent = 'Google Maps could not load. Check the API key, Maps JavaScript API, Places API, and billing settings.';
+        return;
+    }
+
+    parkingMap = new google.maps.Map(document.getElementById('parkingMap'), {
+        center: { lat: 16.5, lng: 80.6 },
+        zoom: 7,
+        mapTypeControl: false
+    });
+    directionsService = new google.maps.DirectionsService();
+    directionsRenderer = new google.maps.DirectionsRenderer({ map: parkingMap });
+    placesAutocomplete = new google.maps.places.Autocomplete(
+        document.getElementById('destinationSearch'),
+        { fields: ['geometry', 'formatted_address', 'name'] }
+    );
+    placesAutocomplete.addListener('place_changed', () => {
+        const place = placesAutocomplete.getPlace();
+        if (!place.geometry?.location) {
+            showNotification('Choose a suggested destination to search nearby parking.', 'warning');
+            return;
+        }
+        searchCenter = {
+            lat: place.geometry.location.lat(),
+            lng: place.geometry.location.lng()
+        };
+        parkingMap.setCenter(searchCenter);
+        parkingMap.setZoom(13);
+        document.getElementById('mapStatus').textContent =
+            `Showing parking facilities near ${place.formatted_address || place.name || 'your destination'}.`;
+        loadLotsForMapSearch();
+    });
+    document.getElementById('mapStatus').textContent = 'Search a destination or use your location to find nearby parking.';
+}
+
+window.initGoogleParkingMap = initGoogleParkingMap;
+
+function loadGoogleMaps() {
+    const key = window.GOOGLE_MAPS_API_KEY;
+    const status = document.getElementById('mapStatus');
+    if (!key || key === 'YOUR_GOOGLE_MAPS_API_KEY') {
+        status.textContent = 'Google Maps is not configured. Add a restricted API key to map-config.js to enable maps, Places search and route estimates.';
+        return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&libraries=places&callback=initGoogleParkingMap`;
+    script.async = true;
+    script.defer = true;
+    script.onerror = () => {
+        status.textContent = 'Google Maps failed to load. Verify your key, API enablement and billing configuration.';
+    };
+    document.head.appendChild(script);
+}
+
+async function loadLocalMapConfiguration() {
+    try {
+        const response = await fetch('./map-config.js', { cache: 'no-store' });
+        if (response.ok) {
+            const config = await response.text();
+            const match = config.match(/window\.GOOGLE_MAPS_API_KEY\s*=\s*(['"])([^'"]*)\1/);
+            if (match) window.GOOGLE_MAPS_API_KEY = match[2];
+        }
+    } catch (error) {
+        console.info('Optional local Google Maps configuration is unavailable.');
+    }
+    loadGoogleMaps();
+}
+
+function distanceInKm(origin, destination) {
+    const radians = value => value * Math.PI / 180;
+    const latitudeDelta = radians(destination.latitude - origin.lat);
+    const longitudeDelta = radians(destination.longitude - origin.lng);
+    const a = Math.sin(latitudeDelta / 2) ** 2 +
+        Math.cos(radians(origin.lat)) * Math.cos(radians(destination.latitude)) *
+        Math.sin(longitudeDelta / 2) ** 2;
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function hasCoordinates(lot) {
+    return lot.coordinates?.latitude !== null && lot.coordinates?.latitude !== undefined &&
+        lot.coordinates?.longitude !== null && lot.coordinates?.longitude !== undefined &&
+        Number.isFinite(Number(lot.coordinates.latitude)) &&
+        Number.isFinite(Number(lot.coordinates.longitude));
+}
+
+function clearParkingMarkers() {
+    mapMarkers.forEach(marker => marker.setMap(null));
+    mapMarkers = [];
+}
+
+function renderParkingMarkers(lots) {
+    if (!parkingMap || !window.google?.maps) return;
+    clearParkingMarkers();
+    lots.forEach(lot => {
+        if (!hasCoordinates(lot)) return;
+        const position = { lat: Number(lot.coordinates.latitude), lng: Number(lot.coordinates.longitude) };
+        const marker = new google.maps.Marker({
+            map: parkingMap,
+            position,
+            title: `${lot.name} (${lot.availableSpots ?? '—'} available)`
+        });
+        marker.addListener('click', () => selectParkingLot(lot.lotId));
+        mapMarkers.push(marker);
+    });
+}
+
+function clearSelectedFacility() {
+    activeSpotAvailabilityRequest?.controller.abort();
+    activeSpotAvailabilityRequest = null;
+    currentLot = null;
+    parkingSpots = [];
+    selectedSpot = null;
+    document.getElementById('lotName').textContent = 'Select a parking facility';
+    document.getElementById('lotAddr').textContent = 'Choose a facility from the search results.';
+    document.getElementById('availCount').textContent = '0';
+    document.getElementById('occupCount').textContent = '0';
+    document.getElementById('slotAvailabilityStatus').textContent = 'Choose a facility to load its live numbered slots.';
+    document.getElementById('rates').textContent = '₹0/hr';
+    document.getElementById('bookingSummary').innerHTML = '<p class="empty-state">Select a parking spot to book</p>';
+    document.getElementById('navigationLink').hidden = true;
+    document.getElementById('routeSummary').textContent = '';
+    document.querySelectorAll('.nearby-lot-card').forEach(card => card.classList.remove('selected'));
+    renderParkingGrid();
+}
+
+async function loadLotsForMapSearch() {
+    const city = document.getElementById('citySelect').value;
+    const query = city ? `?city=${encodeURIComponent(city)}` : '';
+    const status = document.getElementById('mapStatus');
+    activeLotSearch?.controller.abort();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    activeLotSearch = { controller, timeoutId };
+    clearSelectedFacility();
+    mapFacilities = [];
+    clearParkingMarkers();
+    document.getElementById('nearbyLots').replaceChildren();
+    status.textContent = `Searching registered parking facilities${city ? ` in ${city}` : ''}...`;
+    try {
+        const response = await fetch(`${API_BASE_URL}/lots${query}`, { signal: controller.signal });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || result.status !== 'SUCCESS') {
+            throw new Error(result.message || `Parking service returned HTTP ${response.status}`);
+        }
+
+        mapFacilities = result.data.map(lot => ({
+            ...lot,
+            distanceKm: searchCenter && hasCoordinates(lot) ? distanceInKm(searchCenter, lot.coordinates) : null
+        })).sort((a, b) => (a.distanceKm ?? Number.MAX_VALUE) - (b.distanceKm ?? Number.MAX_VALUE));
+
+        const nearby = document.getElementById('nearbyLots');
+        nearby.replaceChildren();
+        mapFacilities.slice(0, 20).forEach(lot => {
+            const card = document.createElement('article');
+            card.className = 'nearby-lot-card';
+            card.dataset.lotId = lot.lotId;
+            const title = document.createElement('strong');
+            title.textContent = lot.name;
+            const detail = document.createElement('p');
+            const availability = Number.isInteger(lot.availableSpots)
+                ? `${lot.availableSpots} of ${lot.totalSpots} spots available now`
+                : `${lot.totalSpots} spots · live availability loads when selected`;
+            detail.textContent = `${lot.address || lot.city} · ${lot.distanceKm?.toFixed(1) ?? '—'} km away · ${availability}`;
+            const button = document.createElement('button');
+            button.className = 'search-button';
+            button.type = 'button';
+            button.textContent = 'View slots and choose facility';
+            button.addEventListener('click', () => selectParkingLot(lot.lotId));
+            const navigate = document.createElement('a');
+            navigate.className = 'search-button navigation-link';
+            navigate.href = getGoogleMapsDirectionsUrl(lot);
+            navigate.target = '_blank';
+            navigate.rel = 'noopener noreferrer';
+            navigate.textContent = 'Navigate with Google Maps';
+            card.append(title, detail, button, navigate);
+            nearby.appendChild(card);
+        });
+
+        renderParkingMarkers(mapFacilities);
+        if (mapFacilities.length) {
+            const mappedCount = mapFacilities.filter(hasCoordinates).length;
+            status.textContent =
+                `Found ${mapFacilities.length} parking facilities, ${mappedCount} with map coordinates${searchCenter ? ' near your search location' : ''}.`;
+        } else {
+            status.textContent = city
+                ? `No active parking facilities are registered in ${city} yet. Try another city or ask an operator to add facilities.`
+                : 'No active parking facilities are registered yet.';
+        }
+    } catch (error) {
+        if (activeLotSearch?.controller !== controller) return;
+        if (controller.signal.aborted) {
+            console.warn('Nearby parking search timed out.');
+        } else {
+            console.error('Nearby parking search failed:', error);
+        }
+        const detail = controller.signal.aborted
+            ? 'The parking service took too long to respond.'
+            : error instanceof TypeError
+                ? 'The parking service could not be reached. Start the backend and MongoDB, then open the site through http://localhost:8080 (not as a file).'
+                : error.message;
+        status.textContent = `Could not load parking facilities. ${detail}`;
+        const nearby = document.getElementById('nearbyLots');
+        const retryButton = document.createElement('button');
+        retryButton.type = 'button';
+        retryButton.className = 'search-button';
+        retryButton.textContent = 'Retry parking search';
+        retryButton.addEventListener('click', loadLotsForMapSearch);
+        nearby.replaceChildren(retryButton);
+        showNotification(`Could not search parking facilities. ${detail}`, 'error');
+    } finally {
+        clearTimeout(timeoutId);
+        if (activeLotSearch?.controller === controller) activeLotSearch = null;
+    }
+}
+
+function selectParkingLot(lotId) {
+    const lot = mapFacilities.find(item => item.lotId === lotId);
+    if (!lot) {
+        showNotification('That facility is no longer in the current search. Search again and select a facility.', 'warning');
+        return;
+    }
+
+    currentLot = { ...lot, id: lot._id || lot.lotId, address: lot.address || `${lot.name}, ${lot.city}` };
+    selectedSpot = null;
+    loadParkingLot();
+    document.querySelectorAll('.nearby-lot-card').forEach(card => {
+        card.classList.toggle('selected', card.dataset.lotId === lotId);
+    });
+    updateParkingRoute(currentLot);
+    if (hasCoordinates(lot)) {
+        parkingMap?.panTo({ lat: Number(lot.coordinates.latitude), lng: Number(lot.coordinates.longitude) });
+    }
+}
+
+function getGoogleMapsDirectionsUrl(lot) {
+    const destination = `${lot.name}, ${lot.address || lot.city}`;
+    return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+}
+
+function updateParkingRoute(lot) {
+    if (!lot) return;
+    const navigationLink = document.getElementById('navigationLink');
+    navigationLink.href = getGoogleMapsDirectionsUrl(lot);
+    navigationLink.hidden = false;
+
+    if (!hasCoordinates(lot)) {
+        document.getElementById('routeSummary').textContent =
+            'Google Maps will navigate to the facility address. A route estimate is unavailable until the operator adds map coordinates.';
+        return;
+    }
+    if (!searchCenter || !directionsService || !directionsRenderer) {
+        document.getElementById('routeSummary').textContent =
+            'Route distance and travel time are available after searching a destination or sharing your location.';
+        return;
+    }
+    directionsService.route({
+        origin: searchCenter,
+        destination: { lat: Number(lot.coordinates.latitude), lng: Number(lot.coordinates.longitude) },
+        travelMode: google.maps.TravelMode.DRIVING
+    }, (result, status) => {
+        if (status !== 'OK' || !result?.routes?.[0]?.legs?.[0]) {
+            document.getElementById('routeSummary').textContent = 'A driving route estimate is unavailable for this facility.';
+            return;
+        }
+        directionsRenderer.setDirections(result);
+        const leg = result.routes[0].legs[0];
+        document.getElementById('routeSummary').textContent =
+            `Route to ${lot.name}: ${leg.distance.text}, about ${leg.duration.text} by car.`;
+    });
+}
+
+function initializeLocationControls() {
+    const button = document.getElementById('useMyLocation');
+    button.addEventListener('click', () => {
+        if (!navigator.geolocation) {
+            showNotification('This browser does not support location lookup.', 'error');
+            return;
+        }
+        button.disabled = true;
+        navigator.geolocation.getCurrentPosition(position => {
+            searchCenter = { lat: position.coords.latitude, lng: position.coords.longitude };
+            if (parkingMap) {
+                parkingMap.setCenter(searchCenter);
+                parkingMap.setZoom(13);
+            }
+            document.getElementById('mapStatus').textContent = 'Searching parking near your current location.';
+            loadLotsForMapSearch().finally(() => { button.disabled = false; });
+        }, error => {
+            button.disabled = false;
+            showNotification(`Could not access your location: ${error.message}`, 'error');
+        }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    });
+
+    document.getElementById('enableNotifications').addEventListener('click', async () => {
+        if (!('Notification' in window)) {
+            showNotification('Browser notifications are not supported here; in-app alerts remain enabled.', 'warning');
+            return;
+        }
+        const permission = await Notification.requestPermission();
+        showNotification(permission === 'granted'
+            ? 'Browser notifications enabled.'
+            : 'Browser notifications were not enabled; in-app alerts remain available.',
+        permission === 'granted' ? 'success' : 'info');
+    });
+}
+
+function initializeAdminDashboard() {
+    document.getElementById('refreshAdminDashboard').addEventListener('click', loadAdminDashboard);
+    document.getElementById('facilityForm').addEventListener('submit', saveFacility);
+    document.getElementById('downloadAdminReport').addEventListener('click', downloadAdminReport);
+    document.getElementById('facilityReport').addEventListener('click', event => {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+        const button = target.closest('[data-deactivate-lot]');
+        if (button) deactivateFacility(button.dataset.deactivateLot);
+        const manageButton = target.closest('[data-manage-lot]');
+        if (manageButton) manageParkingSlot(manageButton.dataset.manageLot);
+        const editButton = target.closest('[data-edit-lot]');
+        if (editButton) editFacility(editButton.dataset.editLot);
+        const activateButton = target.closest('[data-activate-lot]');
+        if (activateButton) setFacilityStatus(activateButton.dataset.activateLot, 'active');
+    });
+}
+
+async function adminRequest(path, options = {}) {
+    if (!currentUser?.token || !['admin', 'superadmin'].includes(currentUser.role)) {
+        throw new Error('A signed-in parking operator account is required.');
+    }
+    const response = await fetch(`${API_BASE_URL}/admin${path}`, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${currentUser.token}`,
+            ...options.headers
+        }
+    });
+    const result = await response.json();
+    if (!response.ok || result.status !== 'SUCCESS') {
+        throw new Error(result.message || 'Operator request failed');
+    }
+    return result.data;
+}
+
+async function loadAdminDashboard() {
+    if (!currentUser || !['admin', 'superadmin'].includes(currentUser.role)) return;
+    try {
+        const from = document.getElementById('reportFrom').value;
+        const to = document.getElementById('reportTo').value;
+        const query = new URLSearchParams();
+        if (from) query.set('from', new Date(`${from}T00:00:00`).toISOString());
+        if (to) query.set('to', new Date(`${to}T23:59:59`).toISOString());
+        const suffix = query.toString() ? `?${query}` : '';
+        const [statsResult, analytics, lots, bookings] = await Promise.all([
+            adminRequest('/stats'),
+            adminRequest(`/analytics${suffix}`),
+            adminRequest('/lots'),
+            adminRequest('/bookings?limit=20')
+        ]);
+        latestAdminAnalytics = analytics;
+        renderAdminStats(statsResult.statistics);
+        renderAdminTable('occupancyReport', ['Facility', 'Occupied', 'Capacity', 'Utilization'], analytics.occupancy.map(row =>
+            [row.lotName, row.occupiedSpots, row.totalSpots, `${row.utilizationPercent}%`]));
+        renderAdminTable('demandReport', ['Facility', 'City', 'Bookings', 'Cancelled'], analytics.bookingsByLot.map(row =>
+            [row.lotName || 'Facility', row.city || '—', row.bookings, row.cancelled]));
+        renderAdminTable('dailyReport', ['Date', 'Reservations'], analytics.bookingsByDay.map(row => [row._id, row.bookings]));
+        renderFacilities(lots);
+        renderAdminTable('adminBookings', ['Reference', 'User', 'Facility', 'Slot', 'Check-in', 'Check-out', 'Status', 'Payment'], bookings.map(booking => [
+            booking.bookingId,
+            booking.userId?.name || '—',
+            booking.lotId?.name || '—',
+            booking.spotNumber,
+            new Date(booking.checkIn).toLocaleString(),
+            new Date(booking.checkOut).toLocaleString(),
+            booking.status,
+            booking.paymentDetails?.paymentStatus || 'pending'
+        ]));
+    } catch (error) {
+        console.error('Could not load operator dashboard:', error);
+        showNotification(`Could not load operator dashboard: ${error.message}`, 'error');
+    }
+}
+
+function renderAdminStats(stats) {
+    const container = document.getElementById('adminStats');
+    container.replaceChildren();
+    const metrics = [
+        ['Facilities', stats.totalLots],
+        ['Reservations', stats.totalBookings],
+        ['Active', stats.activeBookings],
+        ['Payment pending', stats.pendingBookings],
+        ['Completed', stats.completedBookings],
+        ['Cancelled', stats.cancelledBookings],
+        ['Registered users', stats.totalUsers],
+        ['Collected revenue', `₹${stats.totalRevenue}`]
+    ];
+    metrics.forEach(([label, value]) => {
+        const card = document.createElement('div');
+        card.className = 'admin-stat-card';
+        const title = document.createElement('span');
+        title.textContent = label;
+        const metric = document.createElement('strong');
+        metric.textContent = value;
+        card.append(title, metric);
+        container.appendChild(card);
+    });
+}
+
+function renderAdminTable(containerId, headers, rows) {
+    const container = document.getElementById(containerId);
+    const table = document.createElement('table');
+    const thead = table.createTHead().insertRow();
+    headers.forEach(header => {
+        const cell = document.createElement('th');
+        cell.textContent = header;
+        thead.appendChild(cell);
+    });
+    const body = table.createTBody();
+    rows.forEach(row => {
+        const tr = body.insertRow();
+        row.forEach(value => {
+            const cell = tr.insertCell();
+            cell.textContent = String(value ?? '—');
+        });
+    });
+    container.replaceChildren(table);
+}
+
+function renderFacilities(lots) {
+    const container = document.getElementById('facilityReport');
+    const table = document.createElement('table');
+    const head = table.createTHead().insertRow();
+    ['ID', 'Facility', 'City', 'Slots', 'Rate', 'Status', 'Management'].forEach(text => {
+        const th = document.createElement('th');
+        th.textContent = text;
+        head.appendChild(th);
+    });
+    const body = table.createTBody();
+    lots.forEach(lot => {
+        const row = body.insertRow();
+        [lot.lotId, lot.name, lot.city, lot.totalSpots, `₹${lot.ratePerHour}`, lot.status].forEach(text => {
+            row.insertCell().textContent = String(text ?? '—');
+        });
+        const action = row.insertCell();
+        if (lot.status === 'active') {
+            const editButton = document.createElement('button');
+            editButton.type = 'button';
+            editButton.textContent = 'Edit capacity/rate';
+            editButton.dataset.editLot = lot.lotId;
+            action.appendChild(editButton);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = 'Manage slots';
+            button.dataset.manageLot = lot.lotId;
+            action.appendChild(button);
+            const deactivateButton = document.createElement('button');
+            deactivateButton.type = 'button';
+            deactivateButton.textContent = 'Deactivate';
+            deactivateButton.dataset.deactivateLot = lot.lotId;
+            action.appendChild(deactivateButton);
+        } else {
+            const statusButton = document.createElement('button');
+            statusButton.type = 'button';
+            statusButton.textContent = lot.status === 'inactive' ? 'Activate' : 'Set active';
+            statusButton.dataset.activateLot = lot.lotId;
+            action.appendChild(statusButton);
+        }
+    });
+    container.replaceChildren(table);
+}
+
+async function saveFacility(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const fields = new FormData(form);
+    const facility = {
+        lotId: fields.get('lotId').trim(),
+        name: fields.get('name').trim(),
+        city: fields.get('city'),
+        address: fields.get('address').trim(),
+        coordinates: { latitude: Number(fields.get('latitude')), longitude: Number(fields.get('longitude')) },
+        totalSpots: Number(fields.get('totalSpots')),
+        ratePerHour: Number(fields.get('ratePerHour'))
+    };
+    try {
+        await adminRequest('/lots', { method: 'POST', body: JSON.stringify(facility) });
+        form.reset();
+        await loadAdminDashboard();
+        showNotification('Parking facility added.', 'success');
+    } catch (error) {
+        showNotification(`Could not add facility: ${error.message}`, 'error');
+    }
+}
+
+async function deactivateFacility(lotId) {
+    if (!confirm(`Deactivate facility ${lotId}?`)) return;
+    try {
+        await adminRequest(`/lots/${encodeURIComponent(lotId)}`, { method: 'DELETE' });
+        await loadAdminDashboard();
+        showNotification(`Facility ${lotId} deactivated.`, 'success');
+    } catch (error) {
+        showNotification(`Could not deactivate facility: ${error.message}`, 'error');
+    }
+}
+
+async function setFacilityStatus(lotId, status) {
+    try {
+        await adminRequest(`/lots/${encodeURIComponent(lotId)}/status`, {
+            method: 'PUT',
+            body: JSON.stringify({ status })
+        });
+        await loadAdminDashboard();
+        showNotification(`Facility ${lotId} set to ${status}.`, 'success');
+    } catch (error) {
+        showNotification(`Could not update facility status: ${error.message}`, 'error');
+    }
+}
+
+async function manageParkingSlot(lotId) {
+    const spotText = prompt(`Enter the slot number at ${lotId} to update:`);
+    if (spotText === null) return;
+    const spotNumber = Number(spotText);
+    if (!Number.isInteger(spotNumber) || spotNumber < 1) {
+        showNotification('Enter a valid positive slot number.', 'error');
+        return;
+    }
+    const status = prompt('Enter slot status: available, occupied, or maintenance', 'occupied');
+    if (!status) return;
+    try {
+        await adminRequest(`/lots/${encodeURIComponent(lotId)}/spots/${spotNumber}`, {
+            method: 'PUT',
+            body: JSON.stringify({ status: status.trim().toLowerCase() })
+        });
+        await loadAdminDashboard();
+        showNotification(`Updated ${lotId} slot ${spotNumber} to ${status}.`, 'success');
+    } catch (error) {
+        showNotification(`Could not update slot: ${error.message}`, 'error');
+    }
+}
+
+async function editFacility(lotId) {
+    try {
+        const lots = await adminRequest('/lots');
+        const lot = lots.find(item => item.lotId === lotId);
+        if (!lot) throw new Error('Facility not found');
+        const totalSpots = prompt('Set total slot capacity:', String(lot.totalSpots));
+        if (totalSpots === null) return;
+        const ratePerHour = prompt('Set hourly rate in rupees:', String(lot.ratePerHour));
+        if (ratePerHour === null) return;
+        const values = { totalSpots: Number(totalSpots), ratePerHour: Number(ratePerHour) };
+        if (!Number.isInteger(values.totalSpots) || values.totalSpots < 1 ||
+            !Number.isFinite(values.ratePerHour) || values.ratePerHour < 1) {
+            throw new Error('Capacity and hourly rate must be positive numbers.');
+        }
+        await adminRequest(`/lots/${encodeURIComponent(lotId)}`, {
+            method: 'PUT',
+            body: JSON.stringify(values)
+        });
+        await loadAdminDashboard();
+        showNotification(`Updated facility ${lotId}.`, 'success');
+    } catch (error) {
+        showNotification(`Could not update facility: ${error.message}`, 'error');
+    }
+}
+
+function downloadAdminReport() {
+    if (!latestAdminAnalytics) {
+        showNotification('Load the operator report before downloading it.', 'warning');
+        return;
+    }
+    const rows = [
+        ['Facility', 'City', 'Bookings', 'Cancelled', 'Capacity', 'Occupied', 'Utilization'],
+        ...latestAdminAnalytics.bookingsByLot.map(row => {
+            const occupancy = latestAdminAnalytics.occupancy.find(item => item.lotId === row.lotId);
+            return [row.lotName, row.city, row.bookings, row.cancelled, occupancy?.totalSpots, occupancy?.occupiedSpots, `${occupancy?.utilizationPercent ?? 0}%`];
+        })
+    ];
+    const csv = rows.map(row => row.map(value => `"${String(value ?? '').replace(/"/g, '""')}"`).join(',')).join('\r\n');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = 'parking-demand-and-utilization.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+}
 
 // ============================================
 // Real-Time Socket.IO Setup
@@ -18,8 +668,14 @@ let socket = null;
 let isConnectedToRealtime = false;
 
 function initializeRealTimeConnection() {
+    if (typeof window.io === 'undefined') {
+        console.warn('⚠️ Socket.IO library not available; continuing without real-time updates.');
+        return;
+    }
+
     // Connect to WebSocket server
     socket = io('http://localhost:5000', {
+        auth: { token: currentUser?.token || '' },
         transports: ['websocket', 'polling'],
         reconnection: true,
         reconnectionDelay: 1000,
@@ -32,6 +688,8 @@ function initializeRealTimeConnection() {
     socket.on('connect', () => {
         isConnectedToRealtime = true;
         console.log('✓ Connected to real-time service');
+        if (currentLot) subscribeToLotUpdates(currentLot.lotId || currentLot.id);
+        bookingStorage.forEach(booking => subscribeToBookingUpdates(booking.id));
         showNotification('✓ Real-time updates enabled', 'success', 2000);
     });
 
@@ -45,34 +703,52 @@ function initializeRealTimeConnection() {
     socket.on('booking:created', (data) => {
         console.log('Real-time: New booking created', data);
         // Refresh available spots if viewing same lot
-        if (currentLot && currentLot.id === data.lotId) {
+        if (currentLot && (currentLot.lotId === data.lotId || currentLot.id === data.lotId)) {
             refreshAvailableSpots();
         }
+        if (currentUser && ['admin', 'superadmin'].includes(currentUser.role)) loadAdminDashboard();
     });
 
     socket.on('booking:updated', (data) => {
         console.log('Real-time: Booking updated', data);
         updateLocalBookingStatus(data.bookingId, data.status);
         displayMyBookings();
+        if (currentUser && ['admin', 'superadmin'].includes(currentUser.role)) loadAdminDashboard();
     });
 
     socket.on('booking:cancelled', (data) => {
         console.log('Real-time: Booking cancelled', data);
-        showNotification(`Booking ${data.bookingId} cancelled with refund ₹${data.refund}`, 'info');
+        if (currentLot && (currentLot.lotId === data.lotId || currentLot.id === data.lotId)) {
+            refreshAvailableSpots();
+        }
+        const cancelledBooking = bookingStorage.find(booking => booking.id === data.bookingId);
+        if (cancelledBooking) {
+            cancelledBooking.status = 'cancelled';
+            saveBookingsToStorage();
+            showNotification(`Booking ${data.bookingId} cancelled with refund ₹${data.refund}`, 'info');
+        }
         displayMyBookings();
+        if (currentUser && ['admin', 'superadmin'].includes(currentUser.role)) loadAdminDashboard();
+    });
+
+    socket.on('spot:updated', data => {
+        if (currentLot && (currentLot.lotId === data.lotId || currentLot.id === data.lotId)) {
+            refreshAvailableSpots();
+        }
+        if (currentUser && ['admin', 'superadmin'].includes(currentUser.role)) loadAdminDashboard();
     });
 
     // Real-time payment updates
     socket.on('payment:confirmed', (data) => {
         console.log('Real-time: Payment confirmed', data);
-        showNotification(`✓ Payment confirmed for booking ${data.orderId}`, 'success');
-        updateLocalPaymentStatus(data.orderId, 'completed');
+        showNotification(`✓ Payment confirmed for booking ${data.bookingId || data.orderId}`, 'success');
+        updateLocalPaymentStatus(data.bookingId || data.orderId, 'completed');
     });
 
     socket.on('payment:failed', (data) => {
         console.log('Real-time: Payment failed', data);
         showNotification(`✗ Payment failed for order ${data.orderId}`, 'error');
-        updateLocalPaymentStatus(data.orderId, 'failed');
+        updateLocalPaymentStatus(data.bookingId || data.orderId, 'failed');
     });
 
     // Handle socket errors
@@ -95,6 +771,13 @@ function subscribeToBookingUpdates(bookingId) {
     }
 }
 
+function updateRealtimeAuthentication() {
+    if (!socket) return;
+    socket.auth = { token: currentUser?.token || '' };
+    if (socket.connected) socket.disconnect();
+    socket.connect();
+}
+
 // Update local booking status
 function updateLocalBookingStatus(bookingId, status) {
     const bookingIndex = bookingStorage.findIndex(b => b.id === bookingId);
@@ -106,7 +789,9 @@ function updateLocalBookingStatus(bookingId, status) {
 
 // Update payment status in local booking
 function updateLocalPaymentStatus(orderId, status) {
-    const bookingIndex = bookingStorage.findIndex(b => b.paymentDetails?.orderId === orderId);
+    const bookingIndex = bookingStorage.findIndex(b =>
+        b.id === orderId || b.paymentDetails?.orderId === orderId
+    );
     if (bookingIndex > -1) {
         bookingStorage[bookingIndex].paymentDetails.paymentStatus = status;
         saveBookingsToStorage();
@@ -294,7 +979,7 @@ async function loginUser(email, password) {
     }
     
     try {
-        const response = await fetch('http://localhost:5000/api/users/login', {
+        const response = await fetch(`${API_BASE_URL}/users/login`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -308,6 +993,10 @@ async function loginUser(email, password) {
         const result = await response.json();
 
         if (response.ok && result.status === 'SUCCESS') {
+            if (!result.data?.token) {
+                showNotification('Login failed because the service did not return a secure booking session.', 'error');
+                return false;
+            }
             const user = result.data;
             clearFailedLoginAttempts(loginIdentifier);
             currentUser = {
@@ -318,6 +1007,7 @@ async function loginUser(email, password) {
                 loginTime: new Date().toISOString(),
                 sessionToken: user.token,
                 token: user.token,
+                role: user.role || 'user',
                 ipAddress: 'user-session-' + Math.random().toString(36).substr(2, 9),
                 deviceId: generateDeviceId(),
                 walletBalance: user.walletBalance || 0
@@ -327,68 +1017,24 @@ async function loginUser(email, password) {
             localStorage.setItem('lastLoginTime', new Date().toISOString());
             localStorage.setItem('userSessionToken', user.token);
             updateUserUI();
+            updateRealtimeAuthentication();
             closeLoginModal();
             console.log('✅ Login successful via MongoDB backend!');
             showNotification('✓ Login Successful! Welcome ' + currentUser.name, 'success');
+            openUserProfile();
             return true;
         }
 
-        console.warn('⚠️ Backend login failed:', result.message || 'Unknown error');
-        showNotification('❌ Email or password is incorrect', 'error');
-        recordFailedLogin(loginIdentifier);
+        const message = response.status === 401
+            ? 'Email or password is incorrect.'
+            : result.message || 'The login service could not create a secure session.';
+        console.warn('⚠️ Backend login failed:', message);
+        showNotification(message, 'error');
+        if (response.status === 401) recordFailedLogin(loginIdentifier);
         return false;
     } catch (error) {
-        console.warn('⚠️ Backend login unavailable, trying local fallback:', error);
-    }
-
-    // Fallback to browser-based localStorage login for offline compatibility
-    const userData = getStoredUserByIdentifier(loginIdentifier);
-    if (!userData) {
-        console.warn('⚠️ User not found:', loginIdentifier);
-        showNotification('❌ Email or password is incorrect', 'error');
-        recordFailedLogin(loginIdentifier);
-        return false;
-    }
-    
-    try {
-        const hashedPassword = hashPassword(password);
-        
-        console.log('🔍 Checking password hash...');
-        console.log('Provided hash:', hashedPassword);
-        console.log('Stored hash:', userData.passwordHash);
-        
-        if (userData.passwordHash !== hashedPassword) {
-            console.warn('⚠️ Password mismatch for:', loginIdentifier);
-            showNotification('❌ Email or password is incorrect', 'error');
-            recordFailedLogin(loginIdentifier);
-            return false;
-        }
-        
-        console.log('✅ Password verified. Logging in:', loginIdentifier);
-        clearFailedLoginAttempts(loginIdentifier);
-        currentUser = {
-            id: userData.id || 'user_' + Math.random().toString(36).substr(2, 9),
-            email: userData.email,
-            name: userData.name,
-            phone: userData.phone,
-            loginTime: new Date().toISOString(),
-            sessionToken: generateSessionToken(),
-            ipAddress: 'user-session-' + Math.random().toString(36).substr(2, 9),
-            deviceId: generateDeviceId(),
-            walletBalance: userData.walletBalance || 0
-        };
-        isUserAuthenticated = true;
-        localStorage.setItem('currentUser', JSON.stringify(currentUser));
-        localStorage.setItem('lastLoginTime', new Date().toISOString());
-        localStorage.setItem('userSessionToken', currentUser.sessionToken);
-        updateUserUI();
-        closeLoginModal();
-        console.log('✅ Login successful!');
-        showNotification('✓ Login Successful! Welcome ' + currentUser.name, 'success');
-        return true;
-    } catch (error) {
-        console.error('❌ Login error:', error);
-        showNotification('❌ Login error. Please try again.', 'error');
+        console.error('❌ Backend login unavailable:', error);
+        showNotification('Login is unavailable because the parking service could not be reached. Please try again when it is online.', 'error');
         return false;
     }
 }
@@ -458,7 +1104,7 @@ async function signupUser(name, email, phone, password, passwordConfirm) {
     }
     
     try {
-        const response = await fetch('http://localhost:5000/api/users/register', {
+        const response = await fetch(`${API_BASE_URL}/users/register`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -474,6 +1120,10 @@ async function signupUser(name, email, phone, password, passwordConfirm) {
         const result = await response.json();
 
         if (response.ok && result.status === 'SUCCESS') {
+            if (!result.data?.token) {
+                showNotification('Account creation failed because the service did not return a secure booking session.', 'error');
+                return false;
+            }
             const user = result.data;
             currentUser = {
                 id: user.userId,
@@ -483,6 +1133,7 @@ async function signupUser(name, email, phone, password, passwordConfirm) {
                 loginTime: new Date().toISOString(),
                 sessionToken: user.token,
                 token: user.token,
+                role: user.role || 'user',
                 ipAddress: 'user-session-' + Math.random().toString(36).substr(2, 9),
                 deviceId: generateDeviceId(),
                 walletBalance: 0
@@ -492,53 +1143,19 @@ async function signupUser(name, email, phone, password, passwordConfirm) {
             localStorage.setItem('lastLoginTime', new Date().toISOString());
             localStorage.setItem('userSessionToken', user.token);
             updateUserUI();
+            updateRealtimeAuthentication();
             closeSignupModal();
             showNotification('✅ Account created successfully! Welcome ' + name, 'success');
             return true;
         }
 
-        showNotification(result.message || '❌ Registration failed. Please try again.', 'error');
+        showNotification(result.message || 'Registration failed because the service did not create a secure account session.', 'error');
         return false;
     } catch (error) {
-        console.error('❌ Backend registration failed, using local fallback:', error);
-    }
-
-    // Check if email already exists
-    const existingUser = localStorage.getItem('users_' + normalizedEmail);
-    if (existingUser) {
-        showNotification('❌ Email already registered', 'error');
+        console.error('❌ Backend registration unavailable:', error);
+        showNotification('Registration is unavailable because the parking service could not be reached. Please try again when it is online.', 'error');
         return false;
     }
-    
-    // Create user profile with secure password hash
-    const newUser = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: name,
-        email: normalizedEmail,
-        phone: phone,
-        passwordHash: hashPassword(password),
-        createdAt: new Date().toISOString(),
-        lastModified: new Date().toISOString(),
-        accountStatus: 'active'
-    };
-    
-    // Save user profile securely
-    localStorage.setItem('users_' + normalizedEmail, JSON.stringify(newUser));
-    
-    currentUser = {
-        id: newUser.id,
-        email: newUser.email,
-        name: newUser.name,
-        loginTime: new Date().toISOString(),
-        sessionToken: Math.random().toString(36).substr(2)
-    };
-    isUserAuthenticated = true;
-    localStorage.setItem('currentUser', JSON.stringify(currentUser));
-    localStorage.setItem('lastLoginTime', new Date().toISOString());
-    updateUserUI();
-    closeSignupModal();
-    showNotification('✅ Account created successfully! Welcome ' + name, 'success');
-    return true;
 }
 
 // Logout user with secure session clearing
@@ -550,6 +1167,7 @@ function logoutUser() {
     localStorage.removeItem('currentUser');
     localStorage.removeItem('lastLoginTime');
     localStorage.removeItem('userSessionToken');
+    updateRealtimeAuthentication();
     updateUserUI();
     showNotification('👋 You have been logged out securely', 'info');
 }
@@ -563,7 +1181,6 @@ function updateUserUI() {
     if (isUserAuthenticated && currentUser) {
         userMenuToggle.innerHTML = `👤 ${currentUser.name.charAt(0).toUpperCase() + currentUser.name.slice(1)}`;
         userMenuToggle.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-        userDropdown.style.display = 'none';
         
         if (userDropdownName) {
             userDropdownName.innerHTML = `👋 ${currentUser.name}<br><small style="font-weight: normal; font-size: 12px;">@${currentUser.email}</small>`;
@@ -573,9 +1190,22 @@ function updateUserUI() {
     } else {
         userMenuToggle.innerHTML = '👤 Login';
         userMenuToggle.style.background = 'linear-gradient(135deg, #2563eb, #1e40af)';
-        userDropdown.style.display = 'none';
         userDropdown.classList.remove('show');
         displayProfileNotAuthenticated();
+    }
+    const adminNavItem = document.getElementById('adminNavItem');
+    const adminDashboard = document.getElementById('adminDashboard');
+    const isOperator = Boolean(currentUser && ['admin', 'superadmin'].includes(currentUser.role));
+    adminNavItem.hidden = !isOperator;
+    adminDashboard.hidden = !isOperator;
+    if (isOperator) {
+        loadAdminDashboard();
+        if (!adminRefreshTimer) adminRefreshTimer = setInterval(() => {
+            if (!document.hidden) loadAdminDashboard();
+        }, 30000);
+    } else if (adminRefreshTimer) {
+        clearInterval(adminRefreshTimer);
+        adminRefreshTimer = null;
     }
 }
 
@@ -636,6 +1266,14 @@ function displayProfileNotAuthenticated() {
             <p>👤 Please <a href="#" onclick="openLoginModal(); return false;">login</a> to view your profile</p>
         </div>
     `;
+}
+
+function openUserProfile() {
+    if (!isUserAuthenticated || !currentUser) return;
+    displayProfile();
+    document.getElementById('userDropdown')?.classList.remove('show');
+    location.hash = 'profile';
+    requestAnimationFrame(() => document.getElementById('profile')?.scrollIntoView({ behavior: 'smooth' }));
 }
 
 // Confirm logout with dialog
@@ -769,14 +1407,50 @@ function checkAuthentication() {
         openLoginModal();
         return false;
     }
+    if (!currentUser || !currentUser.token) {
+        showNotification('A backend-connected account is required to create a live booking. Please log in while the API is running.', 'error');
+        return false;
+    }
     return true;
 }
 
-// Load bookings from localStorage on startup
-function loadBookingsFromStorage() {
-    const stored = localStorage.getItem('parkingBookings');
-    bookingStorage = stored ? JSON.parse(stored) : [];
-    displayMyBookings();
+async function loadBookingsFromStorage() {
+    if (!currentUser || !currentUser.token) {
+        bookingStorage = [];
+        displayMyBookings();
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/bookings/user/${encodeURIComponent(currentUser.id)}`, {
+            headers: { Authorization: `Bearer ${currentUser.token}` }
+        });
+        const result = await response.json();
+        if (!response.ok || result.status !== 'SUCCESS') {
+            throw new Error(result.message || 'Unable to load bookings');
+        }
+
+        bookingStorage = result.data.map(booking => ({
+            id: booking.bookingId,
+            lotId: booking.lotId?.lotId || booking.lotId?._id,
+            lotName: booking.lotId?.name || 'Parking lot',
+            city: booking.lotId?.city || '',
+            spotNumber: booking.spotNumber,
+            checkIn: booking.checkIn,
+            checkOut: booking.checkOut,
+            paymentMethod: booking.paymentDetails?.paymentMethod || '',
+            amount: booking.paymentDetails?.totalAmount || 0,
+            status: booking.status,
+            createdAt: booking.createdAt,
+            qrCode: booking.qrCode,
+            paymentDetails: booking.paymentDetails
+        }));
+        bookingStorage.forEach(booking => subscribeToBookingUpdates(booking.id));
+        displayMyBookings();
+    } catch (error) {
+        console.error('Unable to load bookings from the API:', error);
+        showNotification(`Could not load your live bookings: ${error.message}`, 'error');
+    }
 }
 
 // Save bookings to localStorage
@@ -843,6 +1517,9 @@ document.addEventListener('DOMContentLoaded', function() {
     
     initializeBookingSystem();
     initializeAllFeatures();
+    loadLocalMapConfiguration();
+    initializeLocationControls();
+    initializeAdminDashboard();
     
     console.log('🅿️ Smart Parking System Initialized Successfully!');
 });
@@ -864,10 +1541,9 @@ function initializeBookingSystem() {
     console.log('✅ Parking data available:', window.parkingData);
     
     const citySelect = document.getElementById('citySelect');
-    const lotSelect = document.getElementById('lotSelect');
     const searchButton = document.getElementById('searchSpots');
 
-    if (!citySelect || !lotSelect || !searchButton) {
+    if (!citySelect || !searchButton) {
         console.error('❌ Required DOM elements not found');
         return;
     }
@@ -875,61 +1551,52 @@ function initializeBookingSystem() {
     // City change handler
     citySelect.addEventListener('change', function() {
         console.log('🏙️ City selected:', this.value);
-        const selectedCity = this.value;
-        lotSelect.innerHTML = '<option value="">Choose a lot...</option>';
-        
-        if (selectedCity) {
-            try {
-                const lots = window.parkingData.getLotsForCity(selectedCity);
-                console.log('📍 Lots found:', lots);
-                
-                if (!lots || lots.length === 0) {
-                    console.warn('⚠️ No lots found for city:', selectedCity);
-                    lotSelect.innerHTML = '<option value="">No lots available</option>';
-                    return;
-                }
-                
-                lots.forEach(lot => {
-                    const option = document.createElement('option');
-                    option.value = lot.id;
-                    option.textContent = lot.name;
-                    option.dataset.lotObj = JSON.stringify(lot);
-                    lotSelect.appendChild(option);
-                });
-                console.log('✅ Lots populated for:', selectedCity);
-            } catch (error) {
-                console.error('❌ Error loading lots:', error);
-                showNotification('Error loading parking lots', 'error');
-            }
-        }
+        populateCityAreas(this.value);
+        loadLotsForMapSearch();
     });
-
-    // Lot change handler
-    lotSelect.addEventListener('change', function() {
-        console.log('🅿️ Lot selected:', this.value);
-        if (this.value) {
-            try {
-                const selectedOption = this.options[this.selectedIndex];
-                currentLot = JSON.parse(selectedOption.dataset.lotObj);
-                console.log('✅ Current lot set:', currentLot);
-                loadParkingLot();
-            } catch (error) {
-                console.error('❌ Error selecting lot:', error);
-                showNotification('Error selecting parking lot', 'error');
-            }
+    const areaSelect = document.getElementById('areaSelect');
+    areaSelect?.addEventListener('change', function() {
+        if (!this.value) return;
+        const area = this.value;
+        const city = citySelect.value;
+        document.getElementById('destinationSearch').value = `${area}, ${city}, India`;
+        const center = this.options[this.selectedIndex].dataset.center;
+        const coordinates = center ? JSON.parse(center) : null;
+        searchCenter = coordinates ? { lat: coordinates[0], lng: coordinates[1] } : null;
+        if (searchCenter && parkingMap) {
+            parkingMap.setCenter(searchCenter);
+            parkingMap.setZoom(14);
         }
+        document.getElementById('mapStatus').textContent =
+            `Selected ${area}, ${city}. Showing registered parking facilities${searchCenter ? ' nearest to this area' : ` in ${city}`}.`;
+        loadLotsForMapSearch();
     });
 
     // Search button handler
     searchButton.addEventListener('click', validateAndSearch);
 
     // Set minimum datetime to now
-    const now = new Date();
-    now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-    document.getElementById('checkIn').min = now.toISOString().slice(0, 16);
-    document.getElementById('checkIn').value = now.toISOString().slice(0, 16);
+    const now = new Date(Date.now() + 60000);
+    now.setSeconds(0, 0);
+    const checkInValue = toLocalDateTimeInputValue(now);
+    document.getElementById('checkIn').min = checkInValue;
+    document.getElementById('checkIn').value = checkInValue;
+    updateCheckOut();
 
     document.getElementById('checkOut').addEventListener('change', updateCheckOut);
+    document.getElementById('checkIn').addEventListener('change', () => {
+        document.getElementById('checkOut').value = '';
+        updateCheckOut();
+        if (currentLot) refreshAvailableSpots();
+    });
+    document.getElementById('checkOut').addEventListener('change', () => {
+        if (currentLot) refreshAvailableSpots();
+    });
+}
+
+function toLocalDateTimeInputValue(date) {
+    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+    return localDate.toISOString().slice(0, 16);
 }
 
 function updateCheckOut() {
@@ -937,22 +1604,21 @@ function updateCheckOut() {
     if (checkInInput) {
         const checkInTime = new Date(checkInInput);
         const checkOutTime = new Date(checkInTime.getTime() + 1 * 60 * 60 * 1000);
-        document.getElementById('checkOut').min = checkInInput;
-        if (!document.getElementById('checkOut').value) {
-            document.getElementById('checkOut').value = checkOutTime.toISOString().slice(0, 16);
+        const checkOutInput = document.getElementById('checkOut');
+        checkOutInput.min = checkInInput;
+        if (!checkOutInput.value || new Date(checkOutInput.value) <= checkInTime) {
+            checkOutInput.value = toLocalDateTimeInputValue(checkOutTime);
         }
     }
 }
 
-function validateAndSearch() {
+async function validateAndSearch() {
     console.log('🔍 Validating and searching...');
-    const city = document.getElementById('citySelect').value;
-    const lot = document.getElementById('lotSelect').value;
     const checkIn = document.getElementById('checkIn').value;
     const checkOut = document.getElementById('checkOut').value;
 
-    if (!city || !lot || !checkIn || !checkOut) {
-        showNotification('❌ Please fill all search fields', 'error');
+    if (!checkIn || !checkOut) {
+        showNotification('Set both check-in and check-out times to search for available spots.', 'error');
         return;
     }
 
@@ -966,7 +1632,28 @@ function validateAndSearch() {
         showNotification('❌ ' + validation.message, 'error');
         return;
     }
-    
+
+    if (!currentLot) {
+        const nearbyLots = document.getElementById('nearbyLots');
+        const mapStatus = document.getElementById('mapStatus');
+        if (!mapFacilities.length) {
+            await loadLotsForMapSearch();
+            if (!mapFacilities.length) return;
+        }
+
+        if (mapFacilities.length === 1) {
+            selectParkingLot(mapFacilities[0].lotId);
+            return;
+        } else {
+            mapStatus.textContent = 'Choose the parking facility you want. Its individual live slots will appear below.';
+            nearbyLots.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            nearbyLots.querySelector('.nearby-lot-card button')?.focus();
+            showNotification('Select your parking facility to see its individual slots.', 'info');
+            return;
+        }
+
+    }
+
     console.log('✅ Validation passed. Loading parking lot...');
     loadParkingLot();
 }
@@ -987,17 +1674,20 @@ function loadParkingLot() {
         document.getElementById('lotAddr').textContent = currentLot.address;
         document.getElementById('rates').textContent = `₹${currentLot.ratePerHour}/hr`;
         
-        const availableCount = window.parkingData.getAvailableSpots(parkingSpots);
-        document.getElementById('availCount').textContent = availableCount;
-        document.getElementById('occupCount').textContent = currentLot.totalSpots - availableCount;
+        document.getElementById('availCount').textContent = '…';
+        document.getElementById('occupCount').textContent = '…';
+        document.getElementById('slotAvailabilityStatus').textContent =
+            `Loading live slots for ${currentLot.name}…`;
 
         renderParkingGrid();
+        subscribeToLotUpdates(currentLot.lotId || currentLot.id);
+        refreshAvailableSpots();
         
         document.getElementById('bookingSummary').innerHTML = '<p class="empty-state">Select a parking spot to book</p>';
 
         scrollToSection('booking');
         console.log('✅ Parking lot loaded successfully');
-        showNotification(`✅ Loaded ${currentLot.name}`, 'success');
+        showNotification(`Loaded ${currentLot.name}; checking live availability…`, 'info');
     } catch (error) {
         console.error('❌ Error loading parking lot:', error);
         showNotification('❌ Error loading parking lot', 'error');
@@ -1012,8 +1702,13 @@ function renderParkingGrid() {
         const spotElement = document.createElement('div');
         spotElement.className = `parking-spot ${spot.status}`;
         spotElement.dataset.spot = String(spot.number);
+        spotElement.dataset.lotId = currentLot?.lotId || currentLot?.id || '';
         spotElement.textContent = spot.number;
-        spotElement.title = `${spot.status === 'available' ? '✓' : '✕'} Spot ${spot.number}`;
+        const facilityLocation = currentLot
+            ? `${currentLot.name}, ${currentLot.address}`
+            : 'No facility selected';
+        spotElement.title = `${spot.status === 'available' ? 'Available' : spot.status} - Spot ${spot.number} at ${facilityLocation}`;
+        spotElement.setAttribute('aria-label', `${spot.status === 'available' ? 'Available' : spot.status}, spot ${spot.number}, ${facilityLocation}`);
 
         if (spot.status === 'available') {
             spotElement.addEventListener('click', () => selectSpot(spot));
@@ -1057,7 +1752,7 @@ function updateBookingSummary() {
             </div>
             <div class="summary-item">
                 <span class="summary-label">Location</span>
-                <span class="summary-value">${currentLot.name}</span>
+                <span class="summary-value">${currentLot.name}, ${currentLot.address}</span>
             </div>
             <div class="summary-item">
                 <span class="summary-label">Check-in</span>
@@ -1084,7 +1779,7 @@ function updateBookingSummary() {
                 <span>₹${costDetails.finalAmount}</span>
             </div>
         </div>
-        <button class="book-button" onclick="openBookingModal()">Proceed to Payment</button>
+        <button class="book-button" onclick="openBookingModal()">Reserve Spot</button>
     `;
 
     document.getElementById('bookingSummary').innerHTML = summaryHTML;
@@ -1112,7 +1807,7 @@ function openBookingModal() {
     const modalDetails = `
         <div class="modal-detail">
             <span class="modal-detail-label">Parking Location</span>
-            <span class="modal-detail-value">${currentLot.name}</span>
+            <span class="modal-detail-value">${currentLot.name}, ${currentLot.address}</span>
         </div>
         <div class="modal-detail">
             <span class="modal-detail-label">Spot #</span>
@@ -1197,74 +1892,46 @@ function openPaymentModal() {
     }
 }
 
-function processPayment() {
+async function processPayment() {
     const selectedMethod = document.querySelector('.payment-btn.selected');
     if (!selectedMethod) {
         showNotification('Please select a payment method', 'error');
         return;
     }
 
+    if (!checkAuthentication()) return;
+
     const paymentMethod = selectedMethod.dataset.method;
     const amount = window.currentBookingCost.finalAmount;
-    
-    // Validate amount
     if (amount < 10 || amount > 100000) {
         showNotification('❌ Invalid amount. Allowed range: ₹10 - ₹100,000', 'error');
         return;
     }
-    
-    // Validate session before payment
-    if (!currentUser.sessionToken || !localStorage.getItem('userSessionToken')) {
-        showNotification('❌ Session expired. Please login again.', 'error');
-        logoutUser();
-        return;
-    }
-    
-    // Anti-fraud check: Verify booking details haven't changed
+
     if (!currentLot || !selectedSpot) {
         showNotification('❌ Booking details invalid. Please select a lot and spot again.', 'error');
         return;
     }
-    
-    // Show explicit confirmation dialog with security details
-    const confirmMsg = `
-🔐 SECURE BOOKING & PAYMENT CONFIRMATION
 
-📍 Location: ${currentLot.name} (${currentLot.city})
-🅿️  Spot: ${selectedSpot.number}
-💳 Payment Method: ${capitalizeFirstLetter(paymentMethod)}
-💰 Amount: ₹${amount}
-🔒 Session: Encrypted & Verified
-🛡️  Fraud Detection: Active
-
-✓ Your data is encrypted with SSL/TLS
-✓ Payment is processed securely
-✓ Session is protected with token verification
-
-Please confirm to proceed with secure payment.`;
-    
-    if (!confirm(confirmMsg)) {
+    const confirmed = confirm(
+        `Create a reservation at ${currentLot.name}, ${currentLot.address}, spot ${selectedSpot.number}, for ₹${amount} using ${capitalizeFirstLetter(paymentMethod)}? Payment is not charged here and will remain pending until a payment provider confirms it.`
+    );
+    if (!confirmed) {
         showNotification('Booking cancelled', 'warning');
         return;
     }
-    
-    // Validate payment details based on method
-    if (!validatePaymentDetails(paymentMethod)) {
-        return;
+
+    const button = document.getElementById('confirmBooking');
+    button.disabled = true;
+    showNotification('Creating reservation with the live parking service…', 'info');
+    try {
+        await completeBooking(paymentMethod);
+    } catch (error) {
+        console.error('Live reservation failed:', error);
+        showNotification(`Reservation failed: ${error.message}`, 'error');
+        button.disabled = false;
+        refreshAvailableSpots();
     }
-    
-    showNotification(`🔐 Processing secure payment via ${capitalizeFirstLetter(paymentMethod)}...`, 'info');
-    
-    // Disable button to prevent multiple clicks (double-submission attack)
-    document.getElementById('confirmBooking').disabled = true;
-    
-    // Generate unique idempotency key for duplicate prevention
-    const idempotencyKey = generateIdempotencyKey();
-    const paymentTransactionId = generatePaymentTransactionId();
-    
-    setTimeout(() => {
-        completeBooking(paymentMethod, idempotencyKey, paymentTransactionId);
-    }, 1500);
 }
 
 // Validate payment details based on payment method
@@ -1309,18 +1976,8 @@ function validatePaymentDetails(paymentMethod) {
     }
 }
 
-// Generate payment transaction ID
-function generatePaymentTransactionId() {
-    return `TXN${Math.random().toString(36).substr(2, 9).toUpperCase()}-${Date.now()}`;
-}
-
-// Generate unique idempotency key for payment safety
-function generateIdempotencyKey() {
-    return `${currentUser.id}-${selectedSpot.number}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-}
-
 // Fetch available spots in real-time
-async function refreshAvailableSpots() {
+async function refreshAvailableSpotsLegacy() {
     try {
         const checkIn = document.getElementById('checkIn').value;
         const checkOut = document.getElementById('checkOut').value;
@@ -1350,7 +2007,7 @@ async function refreshAvailableSpots() {
 }
 
 // Update UI with real-time available spots
-function updateAvailableSpotsUI(availableSpots) {
+function updateAvailableSpotsUILegacy(availableSpots) {
     const spotNumbers = availableSpots.map(s => s.spotNumber);
     document.querySelectorAll('.parking-spot').forEach(spot => {
         const spotNum = parseInt(spot.dataset.spot);
@@ -1362,59 +2019,6 @@ function updateAvailableSpotsUI(availableSpots) {
             spot.classList.remove('available');
         }
     });
-}
-
-function completeBooking(paymentMethod, idempotencyKey, paymentTransactionId) {
-    // Verify session is still active
-    const storedSessionToken = localStorage.getItem('userSessionToken');
-    if (!storedSessionToken || storedSessionToken !== currentUser.sessionToken) {
-        showNotification('❌ Session expired. Transaction cancelled for security.', 'error');
-        logoutUser();
-        return;
-    }
-    
-    const checkIn = document.getElementById('checkIn').value;
-    const checkOut = document.getElementById('checkOut').value;
-    const bookingRef = window.parkingData.generateBookingRef();
-    const costDetails = window.currentBookingCost;
-
-    const booking = {
-        id: bookingRef,
-        lotId: currentLot.id,
-        lotName: currentLot.name,
-        city: currentLot.city,
-        spotNumber: selectedSpot.number,
-        checkIn: checkIn,
-        checkOut: checkOut,
-        paymentMethod: paymentMethod,
-        amount: costDetails.finalAmount,
-        status: 'confirmed',
-        createdAt: new Date().toISOString(),
-        qrCode: `PARK-${selectedSpot.number}-${bookingRef}`,
-        userId: currentUser.id,
-        userEmail: currentUser.email,
-        paymentDetails: {
-            orderId: null,
-            paymentStatus: 'pending',
-            idempotencyKey: idempotencyKey,
-            transactionId: paymentTransactionId,
-            amount: costDetails.finalAmount,
-            timestamp: Date.now(),
-            sessionToken: currentUser.sessionToken,
-            deviceId: currentUser.deviceId
-        }
-    };
-
-    bookingStorage.push(booking);
-    saveBookingsToStorage();
-
-    closeModal();
-    resetBookingForm();
-    displayMyBookings();
-
-    showNotification(`✅ Booking confirmed! Reference: ${bookingRef}\n🔐 Transaction ID: ${paymentTransactionId}`, 'success');
-    
-    setTimeout(() => scrollToSection('myBookings'), 500);
 }
 
 function resetBookingForm() {
@@ -1455,10 +2059,13 @@ function createBookingCard(booking) {
     const now = new Date();
     
     let status = 'Upcoming';
-    
-    if (now > checkOutTime) {
+    if (booking.status === 'cancelled') {
+        status = 'Cancelled';
+    } else if (booking.status === 'pending') {
+        status = 'Payment pending';
+    } else if (booking.status === 'completed' || now > checkOutTime) {
         status = 'Completed';
-    } else if (now > checkInTime) {
+    } else if (booking.status === 'active' || now > checkInTime) {
         status = 'Active';
     }
 
@@ -1472,7 +2079,7 @@ function createBookingCard(booking) {
                 <span class="booking-detail-icon">📍</span>
                 <div class="booking-detail-text">
                     <div class="booking-detail-label">Location</div>
-                    <div class="booking-detail-value">${booking.lotName}</div>
+                    <div class="booking-detail-value">${booking.lotName}${booking.address ? `, ${booking.address}` : ''}</div>
                 </div>
             </div>
             <div class="booking-detail">
@@ -1532,15 +2139,6 @@ function viewBookingDetails(bookingId) {
     }
 }
 
-function cancelBooking(bookingId) {
-    if (confirm('Are you sure you want to cancel this booking?')) {
-        bookingStorage = bookingStorage.filter(b => b.id !== bookingId);
-        saveBookingsToStorage();
-        displayMyBookings();
-        showNotification('Booking cancelled successfully', 'success');
-    }
-}
-
 // ============================================
 // Scroll and Navigation
 // ============================================
@@ -1554,7 +2152,6 @@ function scrollToSection(sectionId) {
 
 function initializeAllFeatures() {
     addAnimationStyles();
-    initializeParkingSpots();
     initializeContactForm();
     initializeHamburgerMenu();
     initializeScrollAnimations();
@@ -1629,6 +2226,12 @@ function setupAuthModals() {
             } else {
                 openLoginModal();
             }
+        });
+
+        const profileLink = document.querySelector('#userDropdown a[href="#profile"]');
+        profileLink?.addEventListener('click', function(e) {
+            e.preventDefault();
+            openUserProfile();
         });
         
         // Login form submission - PRIMARY FIX
@@ -1809,24 +2412,6 @@ function showLogoutMenu() {
 // Utilities
 // ============================================
 
-function initializeParkingSpots() {
-    const spots = document.querySelectorAll('.spot');
-    spots.forEach((spot) => {
-        spot.addEventListener('click', function() {
-            if (this.classList.contains('available')) {
-                this.classList.remove('available');
-                this.classList.add('occupied');
-                this.title = 'Occupied';
-            } else {
-                this.classList.remove('occupied');
-                this.classList.add('available');
-                this.title = 'Available';
-            }
-        });
-        spot.style.cursor = 'pointer';
-    });
-}
-
 function initializeContactForm() {
     const contactForm = document.getElementById('contactForm');
     if (contactForm) {
@@ -1855,6 +2440,9 @@ function initializeContactForm() {
 }
 
 function showNotification(message, type = 'info') {
+    if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        new Notification('Smart Parking', { body: String(message) });
+    }
     const notification = document.createElement('div');
     notification.className = `notification notification-${type}`;
     notification.textContent = message;
@@ -2032,3 +2620,172 @@ if (window.performance) {
 }
 
 console.log('🎉 Smart Parking System fully loaded and ready!');
+
+async function refreshAvailableSpots() {
+    if (!currentLot || !parkingSpots.length) return;
+
+    const checkIn = document.getElementById('checkIn').value;
+    const checkOut = document.getElementById('checkOut').value;
+    if (!checkIn || !checkOut) return;
+
+    activeSpotAvailabilityRequest?.controller.abort();
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+        timedOut = true;
+        controller.abort();
+    }, 10000);
+    activeSpotAvailabilityRequest = { controller, timeoutId };
+    const lotIdentifier = currentLot.lotId || currentLot.id;
+
+    try {
+        const query = new URLSearchParams({
+            checkIn: new Date(checkIn).toISOString(),
+            checkOut: new Date(checkOut).toISOString()
+        });
+        const response = await fetch(
+            `${API_BASE_URL}/lots/${encodeURIComponent(lotIdentifier)}/spots?${query}`,
+            { signal: controller.signal }
+        );
+        const result = await response.json().catch(() => ({}));
+        if (activeSpotAvailabilityRequest?.controller !== controller) return;
+        if (!response.ok || result.status !== 'SUCCESS' || !Array.isArray(result.data)) {
+            throw new Error(result.message || 'Unable to check spot availability');
+        }
+        const validStatuses = new Set(['available', 'reserved', 'occupied', 'maintenance']);
+        if (result.data.some(spot =>
+            !Number.isInteger(Number(spot.spotNumber)) || !validStatuses.has(spot.status)
+        )) {
+            throw new Error('The facility returned invalid slot availability data. Ask the operator to check this location.');
+        }
+        const spotNumbers = new Set(result.data.map(spot => Number(spot.spotNumber)));
+        if (result.data.length !== parkingSpots.length ||
+            spotNumbers.size !== parkingSpots.length ||
+            parkingSpots.some(spot => !spotNumbers.has(spot.number))) {
+            throw new Error('The facility returned an incomplete slot list. Ask the operator to sync its slot capacity.');
+        }
+        updateAvailableSpotsUI(result.data);
+        document.getElementById('slotAvailabilityStatus').textContent =
+            `${parkingSpots.filter(spot => spot.status === 'available').length} of ${parkingSpots.length} slots available for the selected time. Select a green slot to continue.`;
+    } catch (error) {
+        if (activeSpotAvailabilityRequest?.controller !== controller) return;
+        if (controller.signal.aborted && !timedOut) return;
+        console.error('Error fetching live spot availability:', error);
+        parkingSpots.forEach(spot => { spot.status = 'unavailable'; });
+        selectedSpot = null;
+        renderParkingGrid();
+        document.getElementById('availCount').textContent = '0';
+        document.getElementById('occupCount').textContent = String(parkingSpots.length);
+        const message = timedOut
+            ? 'Live slot search timed out. Check that the updated backend and MongoDB are running, then search again.'
+            : error instanceof TypeError
+                ? 'The parking service could not be reached. Start the backend and MongoDB, then search again.'
+                : error.message;
+        document.getElementById('slotAvailabilityStatus').textContent =
+            `Slots cannot be reserved until live availability loads. ${message}`;
+        showNotification(message, 'error');
+    } finally {
+        clearTimeout(timeoutId);
+        if (activeSpotAvailabilityRequest?.controller === controller) {
+            activeSpotAvailabilityRequest = null;
+        }
+    }
+}
+
+function updateAvailableSpotsUI(availableSpots) {
+    const statusByNumber = new Map(availableSpots.map(spot => [Number(spot.spotNumber), spot.status || 'available']));
+    parkingSpots.forEach(spot => {
+        spot.status = statusByNumber.get(spot.number) || 'occupied';
+    });
+    if (selectedSpot && statusByNumber.get(selectedSpot.number) !== 'available') selectedSpot = null;
+    const availableCount = parkingSpots.filter(spot => spot.status === 'available').length;
+    document.getElementById('availCount').textContent = String(availableCount);
+    document.getElementById('occupCount').textContent = String(parkingSpots.length - availableCount);
+    renderParkingGrid();
+}
+
+async function completeBooking(paymentMethod) {
+    if (!currentUser || !currentUser.token ||
+        localStorage.getItem('userSessionToken') !== currentUser.token) {
+        showNotification('Your backend session expired. Please log in again.', 'error');
+        logoutUser();
+        return;
+    }
+    if (!currentLot || !selectedSpot) {
+        throw new Error('Select a currently available spot before reserving.');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/bookings`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${currentUser.token}`
+        },
+        body: JSON.stringify({
+            lotId: currentLot.lotId || currentLot.id,
+            spotNumber: selectedSpot.number,
+            checkIn: new Date(document.getElementById('checkIn').value).toISOString(),
+            checkOut: new Date(document.getElementById('checkOut').value).toISOString(),
+            paymentMethod
+        })
+    });
+    const result = await response.json();
+    if (!response.ok || result.status !== 'SUCCESS') {
+        throw new Error(result.message || 'The booking could not be created');
+    }
+
+    const booking = {
+        id: result.data.bookingId,
+        lotId: currentLot.lotId || currentLot.id,
+        lotName: currentLot.name,
+        address: currentLot.address,
+        city: currentLot.city,
+        spotNumber: result.data.spotNumber,
+        checkIn: result.data.checkIn,
+        checkOut: result.data.checkOut,
+        paymentMethod,
+        amount: result.data.amount,
+        status: result.data.status,
+        createdAt: new Date().toISOString(),
+        qrCode: result.data.qrCode,
+        paymentDetails: { paymentStatus: 'pending' }
+    };
+
+    bookingStorage.unshift(booking);
+    saveBookingsToStorage();
+    subscribeToBookingUpdates(booking.id);
+    closeBookingModal();
+    resetBookingForm();
+    displayMyBookings();
+    await refreshAvailableSpots();
+    showNotification(`Reservation created: ${booking.id}. Payment is pending confirmation.`, 'success');
+    setTimeout(() => scrollToSection('myBookings'), 500);
+}
+
+async function cancelBooking(bookingId) {
+    const booking = bookingStorage.find(item => item.id === bookingId);
+    if (!booking || !currentUser || !currentUser.token) {
+        showNotification('Unable to cancel this live booking. Please log in again.', 'error');
+        return;
+    }
+    if (!confirm('Are you sure you want to cancel this booking?')) return;
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/bookings/${encodeURIComponent(bookingId)}`, {
+            method: 'DELETE',
+            headers: { Authorization: `Bearer ${currentUser.token}` }
+        });
+        const result = await response.json();
+        if (!response.ok || result.status !== 'SUCCESS') {
+            throw new Error(result.message || 'Unable to cancel booking');
+        }
+        booking.status = 'cancelled';
+        saveBookingsToStorage();
+        displayMyBookings();
+        if (currentLot && currentLot.lotId === booking.lotId) await refreshAvailableSpots();
+        showNotification('Booking cancelled successfully', 'success');
+    } catch (error) {
+        console.error('Live booking cancellation failed:', error);
+        showNotification(`Could not cancel booking: ${error.message}`, 'error');
+    }
+}

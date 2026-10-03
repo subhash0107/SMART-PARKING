@@ -68,7 +68,8 @@ router.post('/register', async (req, res) => {
                 name: user.name,
                 email: user.email,
                 phone: user.phone,
-                token: token
+                token: token,
+                role: user.role
             }
         });
     } catch (error) {
@@ -140,6 +141,7 @@ router.post('/login', async (req, res) => {
                 email: user.email,
                 phone: user.phone,
                 token: token,
+                role: user.role,
                 walletBalance: user.walletBalance,
                 totalBookings: user.totalBookings
             }

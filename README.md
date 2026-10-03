@@ -312,4 +312,19 @@ This project demonstrates:
 
 **Last Updated**: April 2026
 **Version**: 1.0
-**Status**: Fully functional and ready to deploy
+**Status**: Frontend demo with live backend booking setup described below
+
+## Live Booking Setup
+
+Customer accounts, facility slots, availability, and reservations are stored in MongoDB through the backend API; opening `index.html` directly only displays the frontend and cannot create live bookings.
+
+1. Install/start MongoDB locally, or create a MongoDB Atlas database. Copy `backend/.env.example` to `backend/.env` and set `MONGODB_URI` to the local database URI or your private Atlas connection URI. Keep `backend/.env` private and do not commit database credentials.
+2. Open a terminal in `backend` and run `npm install` followed by `npm start`. The backend waits for MongoDB, then seeds 28 development parking locations across Vizag, Ongole, Tirupati, Vijayawada, Guntur, Kadapa, Hyderabad, Warangal, Karimnagar, Nizamabad, Khammam, Nalgonda, Mahbubnagar, Siddipet, and Suryapet with exactly 10 numbered slots each (280 total). If reducing an existing development lot would remove a booked, occupied, or maintenance slot, startup reports the location and blocks API readiness instead of deleting it. Resolve that slot first, then restart.
+3. Customer registration stores name, email, phone, and a bcrypt-hashed password in MongoDB. Login issues a backend session token; browser-only accounts are not persisted customer accounts and cannot place live bookings.
+4. Serve the project root over HTTP (for example, `npx http-server . -p 8080`) and open `http://localhost:8080`.
+5. Every registered user can select a facility and an available slot. Availability is read from MongoDB and refreshed through Socket.IO. The reservation is stored with payment pending; this app does not charge a payment method until a payment provider is integrated.
+6. To enable the embedded map, destination autocomplete, and route estimates, copy `map-config.example.js` to the ignored local file `map-config.js`, add a browser API key restricted by HTTP referrer, and enable Google Maps JavaScript API, Places API, and Directions API with billing. Each discovered facility can also be selected directly from its result card and opened in Google Maps navigation using its address, without configuring an embedded map key. Update facility coordinates in the operator dashboard and verify seed coordinates before public use.
+
+The operator dashboard is shown to admin/superadmin accounts only. Create or promote an operator account in the database; new public signups are ordinary users. Its facility/slot occupancy is booking- and operator-reported, not a live IoT sensor feed. Browser notifications require the user to grant permission. Payment method selection only creates a pending reservation; it does not charge a card, wallet, or UPI account.
+
+If parking search reports that it cannot reach the service, make sure the backend is listening on port 5000 and MongoDB is connected. Serve the frontend over HTTP at `http://localhost:8080`; opening `index.html` as a `file://` URL can be blocked by browser cross-origin rules.
